@@ -215,6 +215,14 @@ app.post("/api/checkout", async (req, res) => {
 /* ---------- routes ---------- */
 app.get("/api/health", (req, res) => res.json({ ok: true, mock: MOCK, ready: MOCK || !!client, payments: !!stripe }));
 
+// Demo mode: lets a visitor try their own file with no login and no cost.
+// Always returns fake data, never calls the real Anthropic API, regardless of MOCK.
+app.post("/api/demo-extract", limiter, upload.single("file"), (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: "No file received." });
+  res.json({ invoice: mockInvoice(file.originalname), demo: true });
+});
+
 app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
   try {
     const file = req.file;

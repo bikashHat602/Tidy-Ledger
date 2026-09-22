@@ -130,8 +130,11 @@ td.del button:hover{color:var(--err)}
       <div class="row">
         <button class="btn" id="pick" type="button">Upload invoices</button>
         <button class="btn ghost" id="sample" type="button">Try sample invoices</button>
+        <button class="btn ghost" id="demoPick" type="button">Try your own file (free demo)</button>
       </div>
+      <p class="hint" style="margin-top:10px">"Free demo" reads no real data from your file — it just shows how the report and headings look, with placeholder numbers. No login needed. To read your actual file, log in and use "Upload invoices" instead.</p>
       <input id="file" type="file" multiple accept="image/*,.pdf,.txt,.csv" hidden>
+      <input id="demoFile" type="file" accept="image/*,.pdf,.txt,.csv" hidden>
     </div>
     <ul id="files"></ul>
     <div class="notice" id="notice" hidden></div>
@@ -530,6 +533,23 @@ async function handleFiles(list){
 }
 $("pick").onclick=function(){ $("file").click(); };
 $("file").onchange=function(){ handleFiles(this.files); this.value=""; };
+
+/* Free demo: your own file, but always fake data, no login, no API cost. */
+$("demoPick").onclick=function(){ $("demoFile").click(); };
+$("demoFile").onchange=async function(){
+  var f=this.files&&this.files[0]; this.value=""; if(!f)return;
+  var st=addFileRow(f.name+" (demo)"); st.textContent="Reading (demo)…";
+  try{
+    var fd=new FormData(); fd.append("file",f);
+    var r=await fetch("/api/demo-extract",{method:"POST",body:fd});
+    var j=await r.json().catch(function(){return {};});
+    if(!r.ok)throw new Error(j.error||"Could not run the demo on this file.");
+    var inv=normalize(j.invoice,f.name+" (demo — placeholder data, not read from your file)");
+    checkInvoice(inv); invoices.push(inv);
+    st.textContent="Demo done"; st.className="st ok";
+  }catch(e){ st.textContent=e.message; st.className="st bad"; }
+  buildRows(); renderTable();
+};
 var drop=$("drop");
 ["dragenter","dragover"].forEach(function(ev){ drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.add("over");}); });
 ["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove("over");}); });
