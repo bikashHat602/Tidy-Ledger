@@ -3,17 +3,23 @@ const path = require("path");
 const express = require("express");
 const multer = require("multer");
 const Anthropic = require("@anthropic-ai/sdk");
+const providers = require("./providers");
 const store = require("./store");
 const auth = require("./auth");
 const mailer = require("./mailer");
 const cookieParser = require("cookie-parser");
 
 const PORT = process.env.PORT || 3000;
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 const MOCK = process.env.MOCK === "1" || process.argv.includes("--demo"); // demo mode: no API key needed, returns fake data
 const MAX_MB = 10;
 
-const client = !MOCK && process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+// Prefer Gemini: it has a genuinely free tier, no card required. Anthropic is
+// used only if no Gemini key is set. Either can be swapped any time in .env.
+const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
+const anthropicClient = !MOCK && !GEMINI_KEY && process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+const PROVIDER = MOCK ? "mock" : GEMINI_KEY ? "gemini" : anthropicClient ? "anthropic" : "none";
 
 // Stripe is optional. Without keys, upgrade requests get a clear error instead of crashing.
 let stripe = null;
@@ -41,67 +47,6 @@ function limiter(req, res, next) {
 setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (!v.some((t) => now - t < 60000)) hits.delete(k); }, 300000).unref();
 
 /* ---------- what we ask the model to return ---------- */
-const num = { type: ["number", "null"] };
-const TOOL = {
-  name: "record_invoice",
-  description: "Record the data extracted from one invoice or receipt.",
-  input_schema: {
-    type: "object",
-    properties: {
-      invoice_no: { type: "string" },
-      supplier: { type: "string" },
-      bill_to: { type: "string" },
-      invoice_date: { type: "string", description: "YYYY-MM-DD, or empty string if missing" },
-      due_date: { type: "string", description: "YYYY-MM-DD, or empty string if missing" },
-      currency: { type: "string", description: "ISO code such as USD, or empty string" },
-      subtotal: num,
-      tax: num,
-      total: num,
-      payment_terms: { type: "string" },
-      lines: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            description: { type: "string" },
-            quantity: num,
-            unit_price: num,
-            line_total: num,
-          },
-          required: ["description", "quantity", "unit_price", "line_total"],
-        },
-      },
-      notes: { type: "array", items: { type: "string" }, description: "Short warnings for the human reviewer" },
-    },
-    required: ["invoice_no", "supplier", "bill_to", "invoice_date", "due_date", "currency", "subtotal", "tax", "total", "payment_terms", "lines", "notes"],
-  },
-};
-const SYSTEM =
-  "You extract data from invoices and receipts. Numbers must be plain numbers with no currency symbols or thousands separators. " +
-  "Use null or an empty string when a value is missing; never guess. " +
-  "If a date could be read two ways (like 03/09/2026), choose the most likely reading and add a short note. " +
-  "If the line items do not add up to the subtotal, or subtotal plus tax does not equal the total, add a short note. " +
-  "If the document is not an invoice, return empty fields and a note saying so. Always call the record_invoice tool.";
-
-/* ---------- build the message content from an uploaded file ---------- */
-const IMAGE_TYPES = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" };
-function buildContent(file) {
-  const ext = (file.originalname.split(".").pop() || "").toLowerCase();
-  const b64 = file.buffer.toString("base64");
-  const ask = { type: "text", text: "Extract the invoice data from this document." };
-  if (file.mimetype === "application/pdf" || ext === "pdf") {
-    return [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } }, ask];
-  }
-  const imgType = IMAGE_TYPES[ext] || (Object.values(IMAGE_TYPES).includes(file.mimetype) ? file.mimetype : null);
-  if (imgType) {
-    return [{ type: "image", source: { type: "base64", media_type: imgType, data: b64 } }, ask];
-  }
-  if (["txt", "csv", "tsv", "text"].includes(ext) || file.mimetype.startsWith("text/")) {
-    return [{ type: "text", text: "Invoice text:\n\n" + file.buffer.toString("utf8").slice(0, 60000) }, ask];
-  }
-  return null;
-}
-
 function mockInvoice(name) {
   return {
     invoice_no: "DEMO-" + (name.length * 37 % 900 + 100), supplier: "Demo Supplier Co.", bill_to: "Your Company", invoice_date: "2026-09-15",
@@ -213,7 +158,7 @@ app.post("/api/checkout", async (req, res) => {
 });
 
 /* ---------- routes ---------- */
-app.get("/api/health", (req, res) => res.json({ ok: true, mock: MOCK, ready: MOCK || !!client, payments: !!stripe }));
+app.get("/api/health", (req, res) => res.json({ ok: true, mock: MOCK, ready: PROVIDER !== "none", provider: PROVIDER, payments: !!stripe }));
 
 // Demo mode: lets a visitor try their own file with no login and no cost.
 // Always returns fake data, never calls the real Anthropic API, regardless of MOCK.
@@ -236,26 +181,24 @@ app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
       return res.status(402).json({ error: "You've used today's " + store.PLAN_LIMITS.free + " free invoices. Upgrade to Pro for unlimited invoices.", code: "limit_reached" });
     }
     if (MOCK) { store.recordUse(user.email); return res.json({ invoice: mockInvoice(file.originalname), remainingToday: store.remaining(user) }); }
-    if (!client) return res.status(500).json({ error: "The server has no API key. Add ANTHROPIC_API_KEY to the .env file and restart." });
+    if (PROVIDER === "none") return res.status(500).json({ error: "The server has no AI provider configured. Add GEMINI_API_KEY (free) or ANTHROPIC_API_KEY to .env and restart." });
+    if (!providers.fileKind(file)) return res.status(415).json({ error: "This file type isn't supported. Use JPG, PNG, WebP, PDF, TXT or CSV." });
 
-    const content = buildContent(file);
-    if (!content) return res.status(415).json({ error: "This file type isn't supported. Use JPG, PNG, WebP, PDF, TXT or CSV." });
+    const invoice = PROVIDER === "gemini"
+      ? await providers.extractGemini(file, GEMINI_KEY, GEMINI_MODEL)
+      : await providers.extractAnthropic(file, anthropicClient, ANTHROPIC_MODEL);
 
-    const msg = await client.messages.create({
-      model: MODEL,
-      max_tokens: 4000,
-      system: SYSTEM,
-      tools: [TOOL],
-      tool_choice: { type: "tool", name: "record_invoice" },
-      messages: [{ role: "user", content }],
-    });
-    const block = msg.content.find((b) => b.type === "tool_use");
-    if (!block) return res.status(502).json({ error: "The reader returned no data. Try a clearer file." });
     store.recordUse(user.email);
-    res.json({ invoice: block.input, remainingToday: store.remaining(user) });
+    res.json({ invoice, remainingToday: store.remaining(user), provider: PROVIDER });
   } catch (err) {
-    console.error("extract error:", err && err.status, err && err.message);
+    console.error("extract error [" + PROVIDER + "]:", err && err.status, err && err.message);
     const s = err && err.status;
+    if (PROVIDER === "gemini") {
+      if (s === 400) return res.status(422).json({ error: "This file couldn't be processed. It may be corrupt, unsupported, or too large." });
+      if (s === 403) return res.status(500).json({ error: "The Gemini API key was rejected. Check GEMINI_API_KEY in .env." });
+      if (s === 429) return res.status(429).json({ error: "Gemini's free-tier limit was hit for now. Wait a minute and try again." });
+      return res.status(500).json({ error: "Something went wrong while reading this file. " + ((err && err.message) || "") });
+    }
     if (s === 401) return res.status(500).json({ error: "The API key was rejected. Check ANTHROPIC_API_KEY in .env." });
     if (s === 404) return res.status(500).json({ error: "The model name was not found. Check ANTHROPIC_MODEL in .env." });
     if (s === 429) return res.status(429).json({ error: "The AI service is busy. Try again in a moment." });
@@ -275,5 +218,10 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.listen(PORT, () => {
   console.log(`TidyLedger running at http://localhost:${PORT}`);
-  console.log(MOCK ? "Demo mode: fake data, no API key needed." : client ? `Using model ${MODEL}.` : "WARNING: no ANTHROPIC_API_KEY set. Add it to .env, or run with: npm run demo");
+  console.log(
+    MOCK ? "Demo mode: fake data, no API key needed."
+    : PROVIDER === "gemini" ? `Using Gemini (free tier), model ${GEMINI_MODEL}.`
+    : PROVIDER === "anthropic" ? `Using Anthropic, model ${ANTHROPIC_MODEL}.`
+    : "WARNING: no AI provider configured. Add GEMINI_API_KEY (free, no card needed) or ANTHROPIC_API_KEY to .env, or run with: npm run demo"
+  );
 });

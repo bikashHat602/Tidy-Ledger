@@ -2,6 +2,22 @@
 
 Upload invoices (photo, PDF, TXT, CSV) → pick and rename your columns → download Excel.
 
+## No money for API credits? Use the free option
+
+This app can read invoices with either **Google Gemini** (free tier, no card needed) or
+**Anthropic** (paid). If `GEMINI_API_KEY` is set, it's used automatically — you never need to
+add a card to try this for real.
+
+1. Go to https://aistudio.google.com/app/apikey
+2. Sign in with any Google account (no billing setup needed for the free tier)
+3. Click "Create API key," copy it
+4. Put it in `.env` as `GEMINI_API_KEY=your-key-here` (locally) or as an environment
+   variable named `GEMINI_API_KEY` on your host (e.g. Render's Environment tab)
+
+The free tier has a request-per-minute limit, which is normal — for a small/testing app it's
+plenty. If you outgrow it later, either wait for the quota to reset or switch to Anthropic by
+removing `GEMINI_API_KEY` and setting `ANTHROPIC_API_KEY` instead.
+
 ## Run it on your computer
 
 1. Install Node.js 18 or newer from https://nodejs.org
