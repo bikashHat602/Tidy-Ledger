@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TidyLedger – Invoice cleaner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{
+  --bg:#f6f7fb; --surface:#ffffff; --ink:#151b2e; --muted:#5b6478; --line:#dfe3ee;
+  --accent:#3547d9; --accent-ink:#ffffff; --hi:#ffe45c; --soft:#eef0fb;
+  --ok:#0f7b4f; --warn:#a15c00; --warn-bg:#fff1d6; --err:#b3261e;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1322; --surface:#171c30; --ink:#eef0f8; --muted:#a2aac1; --line:#2a3050;
+    --accent:#8d9bff; --accent-ink:#0f1322; --hi:#e2c53a; --soft:#1f2542;
+    --ok:#4fd49b; --warn:#ffc266; --warn-bg:#3a2d12; --err:#ff8a80;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1322; --surface:#171c30; --ink:#eef0f8; --muted:#a2aac1; --line:#2a3050;
+  --accent:#8d9bff; --accent-ink:#0f1322; --hi:#e2c53a; --soft:#1f2542;
+  --ok:#4fd49b; --warn:#ffc266; --warn-bg:#3a2d12; --err:#ff8a80;
+}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px 60px}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 0}
+.logo{font-weight:800;font-size:21px;letter-spacing:-.02em}
+.logo span{background:var(--hi);color:#151b2e;padding:0 5px;border-radius:3px;margin-right:2px}
+h1{font-size:clamp(28px,4.4vw,44px);letter-spacing:-.03em;line-height:1.05;margin:8px 0 8px;font-weight:800}
+.lead{color:var(--muted);margin:0 0 26px;max-width:60ch}
+h2{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
+.hint{color:var(--muted);font-size:14.5px;margin:0 0 14px}
+.block{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px}
+
+.btn{display:inline-block;background:var(--accent);color:var(--accent-ink);font:600 15px/1 "Bricolage Grotesque",system-ui,sans-serif;
+  padding:13px 18px;border-radius:8px;border:0;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn.ghost:hover{border-color:var(--ink);filter:none}
+.btn.small{padding:9px 13px;font-size:14px}
+
+/* upload */
+.drop{border:2px dashed var(--line);border-radius:12px;padding:28px 18px;text-align:center;background:var(--soft);transition:border-color .2s,background .2s}
+.drop.over{border-color:var(--accent);background:var(--surface)}
+.drop p{margin:0 0 12px;color:var(--muted)}
+.drop .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+#files{list-style:none;margin:14px 0 0;padding:0}
+#files li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line);font-size:14.5px}
+#files .st{color:var(--muted);text-align:right}
+#files .st.ok{color:var(--ok)}
+#files .st.bad{color:var(--err)}
+.notice{margin-top:12px;font-size:14.5px;color:var(--warn);background:var(--warn-bg);padding:10px 12px;border-radius:8px}
+.notice[hidden]{display:none}
+
+/* columns */
+.pills{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.pill{display:flex;align-items:center;background:var(--soft);border:1.5px solid var(--line);border-radius:10px;overflow:hidden}
+.pill input{border:0;background:transparent;color:var(--ink);font:600 14.5px "Bricolage Grotesque",system-ui,sans-serif;padding:9px 6px 9px 10px;width:118px}
+.pill input:focus{outline:2px solid var(--accent);outline-offset:-2px}
+.pill button{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:9px 8px;font-size:14px;line-height:1}
+.pill button:hover{color:var(--ink);background:var(--line)}
+.pill button.x:hover{color:var(--err)}
+.addrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.addrow .lab{font-size:14px;color:var(--muted);margin-right:2px}
+.chip{border:1.5px dashed var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 12px;font:500 14px "Bricolage Grotesque",system-ui,sans-serif;cursor:pointer}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.custom{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.custom input,select{border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:9px 11px;font:500 14.5px "Bricolage Grotesque",system-ui,sans-serif}
+.custom input{min-width:220px}
+.modes{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:12px;font-size:14.5px}
+
+/* table */
+.tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14.5px}
+th{background:var(--soft);text-align:left;font-weight:700;padding:10px 8px;white-space:nowrap;border-bottom:1.5px solid var(--line)}
+td{border-bottom:1px solid var(--line);padding:0}
+td input{width:100%;min-width:90px;border:0;background:transparent;color:var(--ink);font:400 14.5px "Bricolage Grotesque",system-ui,sans-serif;padding:9px 8px}
+td input:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--surface)}
+td.n input{text-align:right;font-variant-numeric:tabular-nums}
+td.del{width:36px;text-align:center}
+td.del button{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;padding:8px}
+td.del button:hover{color:var(--err)}
+.empty{padding:34px 16px;text-align:center;color:var(--muted)}
+.flags{margin:0 0 14px;padding:0;list-style:none}
+.flags li{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:9px 12px;margin-bottom:8px;font-size:14.5px}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:8px;font-size:14.5px;opacity:0;pointer-events:none;transition:opacity .25s;max-width:90vw}
+#toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){#toast,.drop{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="logo"><span>Tidy</span>Ledger</div></header>
+  <h1>Turn messy business documents into clean Excel reports in minutes</h1>
+  <p class="lead">Upload your invoices, choose the columns you want, fix anything that looks off, then download one clean Excel file.</p>
+
+  <div class="block">
+    <h2>Your account</h2>
+    <p class="hint" id="acctHint">Log in with your email to start. The free plan includes 5 invoices a day.</p>
+    <div class="custom" style="margin-bottom:6px" id="loginRow">
+      <input id="email" type="email" placeholder="you@example.com" aria-label="Email address" autocomplete="email">
+      <button class="btn ghost small" id="emailSave" type="button">Send login link</button>
+    </div>
+    <div class="custom" style="margin-bottom:6px" id="loggedRow" hidden>
+      <button class="btn ghost small" id="logout" type="button">Log out</button>
+      <button class="btn ghost small" id="upgrade" type="button" hidden>Upgrade to Pro</button>
+    </div>
+  </div>
+
+  <div class="block">
+    <h2>1. Upload invoices</h2>
+    <p class="hint">Photos (JPG, PNG, WebP), PDFs, or text and CSV files. You can select many at once.</p>
+    <div class="drop" id="drop">
+      <p>Drag files here, or choose them from your device.</p>
+      <div class="row">
+        <button class="btn" id="pick" type="button">Upload invoices</button>
+        <button class="btn ghost" id="sample" type="button">Try sample invoices</button>
+      </div>
+      <input id="file" type="file" multiple accept="image/*,.pdf,.txt,.csv" hidden>
+    </div>
+    <ul id="files"></ul>
+    <div class="notice" id="notice" hidden></div>
+  </div>
+
+  <div class="block">
+    <h2>2. Choose your columns</h2>
+    <p class="hint">Rename a heading by typing in it. Use the arrows to reorder and × to remove. Removed headings can be added back.</p>
+    <div class="pills" id="pills"></div>
+    <div class="addrow" id="addback"></div>
+    <div class="custom">
+      <input id="customName" type="text" placeholder="Add your own heading, e.g. PO number" maxlength="40" aria-label="New heading name">
+      <button class="btn ghost small" id="customAdd" type="button">Add heading</button>
+    </div>
+    <div class="modes">
+      <label for="mode">Rows in the report:</label>
+      <select id="mode">
+        <option value="line">One row per line item</option>
+        <option value="invoice">One row per invoice</option>
+      </select>
+      <button class="btn ghost small" id="reset" type="button">Reset headings</button>
+    </div>
+  </div>
+
+  <div class="block">
+    <h2>3. Check and download</h2>
+    <p class="hint">Click any cell to edit it. Custom headings start empty, so type your values in.</p>
+    <ul class="flags" id="flags"></ul>
+    <div class="tools">
+      <button class="btn" id="xlsx" type="button" disabled>Download Excel</button>
+      <button class="btn ghost" id="csv" type="button" disabled>Download CSV</button>
+      <button class="btn ghost" id="clear" type="button" disabled>Clear all invoices</button>
+    </div>
+    <div class="scroll"><table id="tbl"><thead></thead><tbody></tbody></table>
+      <div class="empty" id="empty">No invoices yet. Upload some or try the sample invoices.</div>
+    </div>
+  </div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- Column catalogue ---------- */
+var STANDARD = [
+  {key:"invoice_no",label:"Invoice no.",scope:"inv"},
+  {key:"supplier",label:"Supplier",scope:"inv"},
+  {key:"bill_to",label:"Bill to",scope:"inv"},
+  {key:"invoice_date",label:"Invoice date",scope:"inv"},
+  {key:"due_date",label:"Due date",scope:"inv"},
+  {key:"currency",label:"Currency",scope:"inv"},
+  {key:"description",label:"Item",scope:"line"},
+  {key:"quantity",label:"Qty",scope:"line",num:true},
+  {key:"unit_price",label:"Unit price",scope:"line",num:true},
+  {key:"line_total",label:"Line amount",scope:"line",num:true},
+  {key:"subtotal",label:"Subtotal",scope:"inv",num:true},
+  {key:"tax",label:"Tax",scope:"inv",num:true},
+  {key:"total",label:"Total",scope:"inv",num:true},
+  {key:"payment_terms",label:"Payment terms",scope:"inv"},
+  {key:"file",label:"Source file",scope:"inv"}
+];
+var DEFAULT_ON = ["invoice_no","supplier","invoice_date","description","quantity","unit_price","line_total","total"];
+var byKey = {}; STANDARD.forEach(function(c){ byKey[c.key]=c; });
+
+var cols = [];          // [{key,label,custom?}] in display order
+var mode = "line";
+var customCount = 0;
+var invoices = [];      // [{file, d:{...}, lines:[...], flags:[...]}]
+var rows = [];
+
+/* ---------- Helpers ---------- */
+function $(id){ return document.getElementById(id); }
+function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.h); toast.h=setTimeout(function(){t.classList.remove("show");},3200); }
+function toNum(v){ if(v===null||v===undefined||v==="")return null; if(typeof v==="number")return isFinite(v)?v:null;
+  var n=parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isFinite(n)?n:null; }
+function fmt(key,n){ if(n===null)return ""; return key==="quantity"?String(n):n.toFixed(2); }
+function save(){ try{ localStorage.setItem("tidyledger.cols",JSON.stringify({cols:cols,mode:mode,cc:customCount})); }catch(e){} }
+function load(){
+  try{
+    var s=JSON.parse(localStorage.getItem("tidyledger.cols")||"null");
+    if(s&&Array.isArray(s.cols)&&s.cols.length){ cols=s.cols; mode=s.mode==="invoice"?"invoice":"line"; customCount=s.cc||0; return; }
+  }catch(e){}
+  defaultCols();
+}
+function defaultCols(){ cols=DEFAULT_ON.map(function(k){return {key:k,label:byKey[k].label};}); mode="line"; customCount=0; }
+
+/* ---------- Building rows ---------- */
+function buildRows(){
+  rows=[];
+  invoices.forEach(function(inv,i){
+    var base={}; 
+    STANDARD.forEach(function(c){ if(c.scope==="inv"){ base[c.key]=(c.num?fmt(c.key,toNum(inv.d[c.key])):(inv.d[c.key]||"")); } });
+    base.file=inv.file;
+    if(mode==="line"){
+      var ls=inv.lines.length?inv.lines:[{}];
+      ls.forEach(function(l){
+        var r=Object.assign({},base);
+        r.description=l.description||""; r.quantity=fmt("quantity",toNum(l.quantity));
+        r.unit_price=fmt("unit_price",toNum(l.unit_price)); r.line_total=fmt("line_total",toNum(l.line_total));
+        r._inv=i; rows.push(r);
+      });
+    } else {
+      var r2=Object.assign({},base), q=0,t=0,hq=false,ht=false;
+      r2.description=inv.lines.map(function(l){return l.description;}).filter(Boolean).join("; ");
+      inv.lines.forEach(function(l){ var a=toNum(l.quantity),b=toNum(l.line_total); if(a!==null){q+=a;hq=true;} if(b!==null){t+=b;ht=true;} });
+      r2.quantity=hq?fmt("quantity",q):""; r2.unit_price=""; r2.line_total=ht?fmt("line_total",t):"";
+      r2._inv=i; rows.push(r2);
+    }
+  });
+}
+
+/* ---------- Rendering: column pills ---------- */
+function renderPills(){
+  var box=$("pills"); box.innerHTML="";
+  cols.forEach(function(c,i){
+    var p=document.createElement("div"); p.className="pill";
+    var l=document.createElement("button"); l.type="button"; l.textContent="◀"; l.setAttribute("aria-label","Move heading left"); l.disabled=i===0;
+    var inp=document.createElement("input"); inp.type="text"; inp.value=c.label; inp.maxLength=40; inp.setAttribute("aria-label","Heading name");
+    var r=document.createElement("button"); r.type="button"; r.textContent="▶"; r.setAttribute("aria-label","Move heading right"); r.disabled=i===cols.length-1;
+    var x=document.createElement("button"); x.type="button"; x.className="x"; x.textContent="×"; x.setAttribute("aria-label","Remove heading "+c.label);
+    l.onclick=function(){ move(i,-1); }; r.onclick=function(){ move(i,1); };
+    x.onclick=function(){ cols.splice(i,1); save(); renderPills(); renderAddBack(); renderTable(); };
+    inp.oninput=function(){ c.label=inp.value; save(); renderHead(); };
+    inp.onblur=function(){ if(!inp.value.trim()){ c.label=byKey[c.key]?byKey[c.key].label:"Column"; inp.value=c.label; save(); renderHead(); } };
+    inp.onkeydown=function(e){ if(e.key==="Enter")inp.blur(); };
+    [l,inp,r,x].forEach(function(n){p.appendChild(n);});
+    box.appendChild(p);
+  });
+  if(!cols.length){ var m=document.createElement("span"); m.className="hint"; m.textContent="No columns selected. Add some below."; box.appendChild(m); }
+}
+function move(i,d){ var j=i+d; if(j<0||j>=cols.length)return; var t=cols[i]; cols[i]=cols[j]; cols[j]=t; save(); renderPills(); renderTable(); }
+function renderAddBack(){
+  var box=$("addback"); box.innerHTML="";
+  var have={}; cols.forEach(function(c){have[c.key]=1;});
+  var missing=STANDARD.filter(function(c){return !have[c.key];});
+  if(!missing.length)return;
+  var lab=document.createElement("span"); lab.className="lab"; lab.textContent="Add back:"; box.appendChild(lab);
+  missing.forEach(function(c){
+    var b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent="+ "+c.label;
+    b.onclick=function(){ cols.push({key:c.key,label:c.label}); save(); renderPills(); renderAddBack(); renderTable(); };
+    box.appendChild(b);
+  });
+}
+
+/* ---------- Rendering: table ---------- */
+function isNum(c){ return byKey[c.key]&&byKey[c.key].num; }
+function renderHead(){
+  var tr=document.createElement("tr");
+  cols.forEach(function(c){ var th=document.createElement("th"); th.textContent=c.label; tr.appendChild(th); });
+  tr.appendChild(document.createElement("th"));
+  var h=$("tbl").tHead; h.innerHTML=""; h.appendChild(tr);
+}
+function renderTable(){
+  renderHead();
+  var tb=$("tbl").tBodies[0]; tb.innerHTML="";
+  rows.forEach(function(r,ri){
+    var tr=document.createElement("tr");
+    cols.forEach(function(c){
+      var td=document.createElement("td"); if(isNum(c))td.className="n";
+      var inp=document.createElement("input"); inp.type="text"; inp.value=r[c.key]===undefined?"":r[c.key];
+      inp.setAttribute("aria-label",c.label+", row "+(ri+1));
+      inp.oninput=function(){ r[c.key]=inp.value; };
+      td.appendChild(inp); tr.appendChild(td);
+    });
+    var d=document.createElement("td"); d.className="del";
+    var b=document.createElement("button"); b.type="button"; b.textContent="×"; b.setAttribute("aria-label","Delete row "+(ri+1));
+    b.onclick=function(){ rows.splice(ri,1); renderTable(); };
+    d.appendChild(b); tr.appendChild(d); tb.appendChild(tr);
+  });
+  var has=rows.length>0&&cols.length>0;
+  $("empty").style.display=rows.length?"none":"block";
+  $("tbl").style.display=rows.length?"table":"none";
+  $("xlsx").disabled=!has; $("csv").disabled=!has; $("clear").disabled=!invoices.length;
+  renderFlags();
+}
+function renderFlags(){
+  var ul=$("flags"); ul.innerHTML="";
+  invoices.forEach(function(inv){
+    inv.flags.forEach(function(f){
+      var li=document.createElement("li"); li.textContent=(inv.file+": ")+f; ul.appendChild(li);
+    });
+  });
+}
+function checkInvoice(inv){
+  var f=(inv.notes||[]).slice(0,4);
+  var sum=0,any=false; inv.lines.forEach(function(l){var v=toNum(l.line_total); if(v!==null){sum+=v;any=true;}});
+  var st=toNum(inv.d.subtotal),tx=toNum(inv.d.tax),tt=toNum(inv.d.total);
+  if(any&&st!==null&&Math.abs(sum-st)>0.02)f.push("Line items add up to "+sum.toFixed(2)+" but the subtotal says "+st.toFixed(2)+". Please check.");
+  if(st!==null&&tt!==null&&Math.abs(st+(tx||0)-tt)>0.02)f.push("Subtotal plus tax is "+(st+(tx||0)).toFixed(2)+" but the total says "+tt.toFixed(2)+". Please check.");
+  inv.flags=f;
+}
+
+/* ---------- Export ---------- */
+function exportMatrix(){
+  var head=cols.map(function(c){return c.label;});
+  var body=rows.map(function(r){
+    return cols.map(function(c){
+      var v=r[c.key]; if(v===undefined||v===null)return "";
+      if(isNum(c)){ var n=toNum(v); return n===null?v:n; }
+      return v;
+    });
+  });
+  return [head].concat(body);
+}
+async function saveFile(name,data,mime){
+  var dl=null;
+  try{ if(window.claude&&window.claude.use)dl=await window.claude.use("downloads"); }catch(e){}
+  if(dl){
+    try{ await dl.save({filename:name,data:data}); toast("Saved "+name); return; }
+    catch(e){ if(e&&e.code==="declined")return; }
+  }
+  var blob=new Blob([data],{type:mime}); var a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
+}
+function stamp(){ return new Date().toISOString().slice(0,10); }
+$("xlsx").onclick=function(){
+  if(typeof XLSX==="undefined"){ toast("Excel export could not load. Try the CSV download."); return; }
+  var m=exportMatrix(); var ws=XLSX.utils.aoa_to_sheet(m);
+  ws["!cols"]=m[0].map(function(_,i){ var w=10; m.forEach(function(r){ w=Math.max(w,String(r[i]).length+2); }); return {wch:Math.min(w,44)}; });
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Invoices");
+  var out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  saveFile("invoice-report-"+stamp()+".xlsx",out,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+};
+$("csv").onclick=function(){
+  var csv=exportMatrix().map(function(r){ return r.map(function(v){ v=String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(","); }).join("\r\n");
+  saveFile("invoice-report-"+stamp()+".csv","\ufeff"+csv,"text/csv");
+};
+
+/* ---------- Extraction (uses Claude through the page's sample capability) ---------- */
+/* ---------- account ---------- */
+var userEmail="", loggedIn=false;
+function updateRemaining(n){
+  if(n===null)$("acctHint").textContent="Signed in as "+userEmail+". You're on the Pro plan: unlimited invoices.";
+  else $("acctHint").textContent="Signed in as "+userEmail+". "+n+" free invoice"+(n===1?"":"s")+" left today.";
+}
+function showLoggedOut(msg){
+  loggedIn=false; userEmail="";
+  $("loginRow").hidden=false; $("loggedRow").hidden=true;
+  $("acctHint").textContent=msg||"Log in with your email to start. The free plan includes 5 invoices a day.";
+}
+async function refreshAccount(){
+  try{
+    var r=await fetch("/api/account",{credentials:"include"});
+    if(!r.ok){ showLoggedOut(); return; }
+    var j=await r.json();
+    userEmail=j.email; loggedIn=true;
+    $("loginRow").hidden=true; $("loggedRow").hidden=false;
+    updateRemaining(j.remainingToday); $("upgrade").hidden=(j.plan!=="free");
+  }catch(e){ showLoggedOut(); }
+}
+$("emailSave").onclick=async function(){
+  var v=$("email").value.trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ toast("Enter a valid email address."); return; }
+  $("emailSave").disabled=true;
+  try{
+    var r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:v})});
+    var j=await r.json();
+    if(!r.ok)throw new Error(j.error||"Could not send the login link.");
+    if(j.dev){
+      // No email server configured yet: log in immediately using the link, so
+      // testing doesn't require setting up SMTP first. Real users get a real email.
+      toast("No email server configured: logging you in directly for now.");
+      await fetch(j.url,{credentials:"include"});
+      await refreshAccount();
+    } else {
+      $("acctHint").textContent="Check "+v+" for a login link. It expires in 15 minutes.";
+      toast("Login link sent to "+v);
+    }
+  }catch(e){ toast(e.message); }
+  $("emailSave").disabled=false;
+};
+$("logout").onclick=async function(){
+  try{ await fetch("/api/logout",{method:"POST",credentials:"include"}); }catch(e){}
+  showLoggedOut("Logged out. Log in again to continue.");
+};
+$("upgrade").onclick=async function(){
+  if(!loggedIn){ toast("Log in first."); return; }
+  try{
+    var r=await fetch("/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({plan:"pro"})});
+    var j=await r.json();
+    if(!r.ok)throw new Error(j.error||"Could not start checkout.");
+    location.href=j.url;
+  }catch(e){ toast(e.message); }
+};
+refreshAccount();
+
+var sampleFn=null, sampleCaps=null, backend=false;
+(async function(){
+  try{
+    if(window.claude&&window.claude.use){
+      sampleFn=await window.claude.use("sample");
+      if(sampleFn){ try{ sampleCaps=await sampleFn.limits(); }catch(e){ sampleCaps=null; } }
+    }
+  }catch(e){ sampleFn=null; }
+  try{
+    var h=await fetch("/api/health",{cache:"no-store"});
+    if(h.ok){ var hj=await h.json(); backend=!!(hj&&hj.ok); if(hj&&hj.mock)showNotice("Demo mode: the server returns fake data instead of reading your files."); }
+  }catch(e){ backend=false; }
+  if(!sampleFn&&!backend)showNotice("Automatic reading isn't available in this view. You can still try the sample invoices to test headings and Excel export.");
+})();
+function showNotice(t){ var n=$("notice"); n.textContent=t; n.hidden=!t; }
+
+var PROMPT='You read invoices and receipts. Extract the data and reply with ONLY one JSON object in exactly this shape:\n'
++'{"invoice_no":"","supplier":"","bill_to":"","invoice_date":"YYYY-MM-DD or empty","due_date":"YYYY-MM-DD or empty","currency":"","subtotal":null,"tax":null,"total":null,"payment_terms":"","lines":[{"description":"","quantity":null,"unit_price":null,"line_total":null}],"notes":[]}\n'
++'Rules: numbers must be plain numbers with no currency symbols or thousands separators. Use null or an empty string when something is missing; never guess. '
++'If a date could be read two ways (like 03/09/2026), choose the most likely and add a short note. If line items do not add up to the subtotal or total, add a short note. '
++'If the document is not an invoice, return empty fields and a note saying so.\n\nThe invoice:\n';
+
+async function pdfToInputs(file){
+  if(typeof pdfjsLib==="undefined")throw new Error("PDF reader could not load. Upload a photo or screenshot of the invoice instead.");
+  pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  var pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+  var text="";
+  for(var p=1;p<=Math.min(pdf.numPages,3);p++){
+    var pg=await pdf.getPage(p); var tc=await pg.getTextContent();
+    text+=tc.items.map(function(i){return i.str;}).join(" ")+"\n";
+  }
+  if(text.replace(/\s/g,"").length>=40)return {text:text.slice(0,30000),images:null};
+  if(!(sampleCaps&&sampleCaps.images))throw new Error("This PDF is a scan and images can't be read here. Try a text-based PDF.");
+  var imgs=[];
+  for(var q=1;q<=Math.min(pdf.numPages,2);q++){
+    var page=await pdf.getPage(q); var vp=page.getViewport({scale:1.6});
+    var cv=document.createElement("canvas"); cv.width=vp.width; cv.height=vp.height;
+    await page.render({canvasContext:cv.getContext("2d"),viewport:vp}).promise;
+    imgs.push(await new Promise(function(res){cv.toBlob(res,"image/png");}));
+  }
+  return {text:"",images:imgs};
+}
+async function extractViaServer(file){
+  if(!loggedIn)throw new Error("Log in above first, then upload.");
+  var fd=new FormData(); fd.append("file",file);
+  var res=await fetch("/api/extract",{method:"POST",credentials:"include",body:fd});
+  var j=await res.json().catch(function(){return {};});
+  if(!res.ok){
+    var err=new Error(j.error||"The server could not read this file.");
+    err.code=j.code; throw err;
+  }
+  if(j.remainingToday!==undefined&&j.remainingToday!==null)updateRemaining(j.remainingToday);
+  return normalize(j.invoice,file.name);
+}
+async function extractOne(file){
+  if(backend)return extractViaServer(file);
+  var name=file.name.toLowerCase(), opts={}, body="";
+  if(/^image\//.test(file.type)||/\.(jpe?g|png|webp|gif)$/.test(name)){
+    if(!(sampleCaps&&sampleCaps.images))throw new Error("Photos can't be read in this view. Try a PDF or text file.");
+    opts.images=[file]; body="(The invoice is in the attached image.)";
+  } else if(/\.pdf$/.test(name)||file.type==="application/pdf"){
+    var r=await pdfToInputs(file);
+    if(r.images){opts.images=r.images; body="(The invoice is in the attached page images.)";} else body=r.text;
+  } else {
+    body=(await file.text()).slice(0,30000);
+  }
+  var d=await sampleFn.json(PROMPT+body,opts);
+  return normalize(d,file.name);
+}
+function normalize(d,file){
+  d=d&&typeof d==="object"?d:{};
+  var out={file:file,d:{},lines:[],notes:Array.isArray(d.notes)?d.notes.map(String):[],flags:[]};
+  ["invoice_no","supplier","bill_to","invoice_date","due_date","currency","payment_terms"].forEach(function(k){ out.d[k]=d[k]==null?"":String(d[k]); });
+  ["subtotal","tax","total"].forEach(function(k){ out.d[k]=toNum(d[k]); });
+  (Array.isArray(d.lines)?d.lines:[]).forEach(function(l){
+    out.lines.push({description:l&&l.description!=null?String(l.description):"",quantity:toNum(l&&l.quantity),unit_price:toNum(l&&l.unit_price),line_total:toNum(l&&l.line_total)});
+  });
+  return out;
+}
+
+/* ---------- Upload handling ---------- */
+function addFileRow(name){
+  var li=document.createElement("li"); var a=document.createElement("span"); a.textContent=name;
+  var s=document.createElement("span"); s.className="st"; s.textContent="Waiting"; li.appendChild(a); li.appendChild(s);
+  $("files").appendChild(li); return s;
+}
+async function handleFiles(list){
+  var files=Array.prototype.slice.call(list); if(!files.length)return;
+  if(!sampleFn&&!backend){ showNotice("Automatic reading isn't available in this view. Try the sample invoices instead."); return; }
+  $("pick").disabled=true;
+  for(var i=0;i<files.length;i++){
+    var st=addFileRow(files[i].name); st.textContent="Reading…";
+    try{
+      var inv=await extractOne(files[i]); checkInvoice(inv); invoices.push(inv);
+      st.textContent="Done"; st.className="st ok";
+    }catch(e){
+      var msg=e&&e.message?e.message:"Could not read this file.";
+      if(e&&e.code==="not_granted")msg="Permission was declined, so this file was not read.";
+      if(e&&e.code==="rate_limited")msg="Too many requests. Wait a moment and try again.";
+      if(e&&e.code==="invalid_json")msg="Couldn't read the fields. Try a clearer file.";
+      if(e&&e.code==="limit_reached")$("upgrade").hidden=false;
+      st.textContent=msg; st.className="st bad";
+      if(e&&(e.code==="not_granted"||e.code==="sampling_disabled"))break;
+    }
+    buildRows(); renderTable();
+  }
+  $("pick").disabled=false;
+}
+$("pick").onclick=function(){ $("file").click(); };
+$("file").onchange=function(){ handleFiles(this.files); this.value=""; };
+var drop=$("drop");
+["dragenter","dragover"].forEach(function(ev){ drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.add("over");}); });
+["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove("over");}); });
+drop.addEventListener("drop",function(e){ if(e.dataTransfer&&e.dataTransfer.files)handleFiles(e.dataTransfer.files); });
+
+/* Sample invoices so the headings and Excel export can be tried without uploading */
+$("sample").onclick=function(){
+  var s1={file:"northwind-INV-20418.pdf",d:{invoice_no:"INV-20418",supplier:"Northwind Supplies Ltd.",bill_to:"Rahman Traders",invoice_date:"2026-09-03",due_date:"2026-10-03",currency:"USD",subtotal:2932.5,tax:146.63,total:3079.13,payment_terms:"Net 30"},
+    lines:[{description:"Thermal paper rolls",quantity:2,unit_price:450,line_total:900},{description:"Delivery charge",quantity:1,unit_price:120,line_total:120},{description:"Packing tape (brown)",quantity:15,unit_price:85.5,line_total:1282.5},{description:"Pallet wrap",quantity:3,unit_price:210,line_total:630}],
+    notes:["Date 03/09/2026 was read as 3 September. Confirm if it should be 9 March."],flags:[]};
+  var s2={file:"harbor-office-5531.jpg",d:{invoice_no:"5531",supplier:"Harbor Office Mart",bill_to:"Rahman Traders",invoice_date:"2026-09-11",due_date:"",currency:"USD",subtotal:415,tax:20.75,total:436.75,payment_terms:""},
+    lines:[{description:"A4 paper (box)",quantity:5,unit_price:38,line_total:190},{description:"Ink cartridge black",quantity:3,unit_price:45,line_total:135},{description:"Stapler heavy duty",quantity:2,unit_price:45,line_total:90}],notes:[],flags:[]};
+  [s1,s2].forEach(function(s){ checkInvoice(s); invoices.push(s); var st=addFileRow(s.file); st.textContent="Sample loaded"; st.className="st ok"; });
+  buildRows(); renderTable(); toast("Sample invoices loaded");
+};
+$("clear").onclick=function(){ invoices=[]; rows=[]; $("files").innerHTML=""; renderTable(); };
+
+/* ---------- Column controls ---------- */
+$("customAdd").onclick=function(){
+  var inp=$("customName"), v=inp.value.trim(); if(!v)return;
+  customCount++; cols.push({key:"c_"+customCount,label:v,custom:true}); inp.value="";
+  save(); renderPills(); renderTable();
+};
+$("customName").onkeydown=function(e){ if(e.key==="Enter")$("customAdd").click(); };
+$("mode").onchange=function(){ mode=this.value; save(); buildRows(); renderTable(); };
+$("reset").onclick=function(){ defaultCols(); $("mode").value=mode; save(); renderPills(); renderAddBack(); buildRows(); renderTable(); };
+
+/* ---------- Start ---------- */
+load(); $("mode").value=mode;
+renderPills(); renderAddBack(); buildRows(); renderTable();
+})();
+</script>
+</body>
+</html>

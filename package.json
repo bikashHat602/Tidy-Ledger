@@ -1,0 +1,20 @@
+{
+  "name": "tidyledger",
+  "version": "1.0.0",
+  "description": "Turn messy invoices into a clean Excel report",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node server.js --demo"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "stripe": "^17.3.1",
+    "nodemailer": "^6.9.15",
+    "cookie-parser": "^1.4.6"
+  },
+  "engines": { "node": ">=18" }
+}
