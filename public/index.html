@@ -190,14 +190,14 @@ var STANDARD = [
   {key:"description",label:"Item",scope:"line"},
   {key:"quantity",label:"Qty",scope:"line",num:true},
   {key:"unit_price",label:"Unit price",scope:"line",num:true},
-  {key:"line_total",label:"Line amount",scope:"line",num:true},
+  {key:"line_total",label:"Line amount (as printed on invoice)",scope:"line",num:true},
   {key:"subtotal",label:"Subtotal",scope:"inv",num:true},
   {key:"tax",label:"Tax",scope:"inv",num:true},
   {key:"total",label:"Total",scope:"inv",num:true},
   {key:"payment_terms",label:"Payment terms",scope:"inv"},
   {key:"file",label:"Source file",scope:"inv"}
 ];
-var DEFAULT_ON = ["invoice_no","supplier","invoice_date","description","quantity","unit_price","line_total","total"];
+var DEFAULT_ON = ["invoice_no","supplier","invoice_date","description","quantity","unit_price","total"];
 var byKey = {}; STANDARD.forEach(function(c){ byKey[c.key]=c; });
 
 var cols = [];          // [{key,label,custom?}] in display order
@@ -233,15 +233,21 @@ function buildRows(){
       var ls=inv.lines.length?inv.lines:[{}];
       ls.forEach(function(l){
         var r=Object.assign({},base);
-        r.description=l.description||""; r.quantity=fmt("quantity",toNum(l.quantity));
-        r.unit_price=fmt("unit_price",toNum(l.unit_price)); r.line_total=fmt("line_total",toNum(l.line_total));
+        r.description=l.description||"";
+        var q=toNum(l.quantity), p=toNum(l.unit_price);
+        r.quantity=fmt("quantity",q); r.unit_price=fmt("unit_price",p);
+        var lineTotal=(q!==null&&p!==null)?q*p:toNum(l.line_total);
+        r.total=fmt("total",lineTotal); // per-line Qty x Unit price, not the invoice grand total
+        r.line_total=fmt("line_total",toNum(l.line_total)); // kept for anyone who adds this column back manually
         r._inv=i; rows.push(r);
       });
     } else {
       var r2=Object.assign({},base), q=0,t=0,hq=false,ht=false;
       r2.description=inv.lines.map(function(l){return l.description;}).filter(Boolean).join("; ");
       inv.lines.forEach(function(l){ var a=toNum(l.quantity),b=toNum(l.line_total); if(a!==null){q+=a;hq=true;} if(b!==null){t+=b;ht=true;} });
-      r2.quantity=hq?fmt("quantity",q):""; r2.unit_price=""; r2.line_total=ht?fmt("line_total",t):"";
+      r2.quantity=hq?fmt("quantity",q):""; r2.unit_price="";
+      // total here stays the real extracted invoice total (base.total), since it may include tax etc.
+      r2.line_total=ht?fmt("line_total",t):"";
       r2._inv=i; rows.push(r2);
     }
   });
