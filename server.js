@@ -198,6 +198,7 @@ app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
       if (s === 403) return res.status(500).json({ error: "The Gemini API key was rejected. Check GEMINI_API_KEY in .env." });
       if (s === 404) return res.status(500).json({ error: "Gemini's model name isn't valid anymore (Google renames these sometimes). Update GEMINI_MODEL in .env to a current model name — check https://ai.google.dev/gemini-api/docs/models for the latest." });
       if (s === 429) return res.status(429).json({ error: "Gemini's free-tier limit was hit for now. Wait a minute and try again." });
+      if (s === 503) return res.status(503).json({ error: "Google's servers are unusually busy right now (this is on their end, already retried a couple of times). Wait a minute and try again." });
       return res.status(500).json({ error: "Something went wrong while reading this file. " + ((err && err.message) || "") });
     }
     if (s === 401) return res.status(500).json({ error: "The API key was rejected. Check ANTHROPIC_API_KEY in .env." });
