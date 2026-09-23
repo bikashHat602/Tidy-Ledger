@@ -56,42 +56,24 @@ async function extractGemini(file, apiKey, model) {
     parts.push({ inline_data: { mime_type: mime, data: file.buffer.toString("base64") } });
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const body = JSON.stringify({
-    contents: [{ role: "user", parts }],
-    generationConfig: { responseMimeType: "application/json", responseSchema: GEMINI_SCHEMA, temperature: 0 },
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: GEMINI_SCHEMA, temperature: 0 },
+    }),
   });
-
-  // The free tier can be briefly overloaded (503) or rate-limited (429). Both
-  // are usually gone within a few seconds, so retry a couple of times before
-  // giving up and showing the person an error.
-  const delays = [1000, 3000]; // wait 1s, then 3s
-  let lastErr;
-  for (let attempt = 0; attempt <= delays.length; attempt++) {
-    let resp, data;
-    try {
-      resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
-      data = await resp.json().catch(() => ({}));
-    } catch (networkErr) {
-      lastErr = networkErr; lastErr.status = 0;
-      if (attempt < delays.length) { await new Promise((r) => setTimeout(r, delays[attempt])); continue; }
-      throw lastErr;
-    }
-    if (resp.ok) {
-      const text = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
-      if (!text) { const err = new Error("The reader returned no data. Try a clearer file."); err.status = 502; throw err; }
-      try { return JSON.parse(text); } catch (e) { const err = new Error("Couldn't understand the reader's response. Try again."); err.status = 502; throw err; }
-    }
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
     const msg = (data && data.error && data.error.message) || "Gemini request failed.";
     const err = new Error(msg);
     err.status = resp.status;
-    lastErr = err;
-    if ((resp.status === 503 || resp.status === 429) && attempt < delays.length) {
-      await new Promise((r) => setTimeout(r, delays[attempt]));
-      continue;
-    }
     throw err;
   }
-  throw lastErr;
+  const text = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
+  if (!text) { const err = new Error("The reader returned no data. Try a clearer file."); err.status = 502; throw err; }
+  try { return JSON.parse(text); } catch (e) { const err = new Error("Couldn't understand the reader's response. Try again."); err.status = 502; throw err; }
 }
 
 /* ---------------- Anthropic (paid) ---------------- */

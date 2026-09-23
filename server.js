@@ -59,6 +59,24 @@ function mockInvoice(name) {
   };
 }
 
+/* ---------- retry helper: Gemini sometimes returns 503 when it's temporarily overloaded ---------- */
+async function withRetry(fn, { retries = 3, baseDelayMs = 1000 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const overloaded = err && (err.status === 503 || /overloaded|high demand/i.test(err.message || ""));
+      if (!overloaded || attempt === retries) throw err;
+      const delay = baseDelayMs * 2 ** attempt; // 1s, 2s, 4s
+      console.log(`Gemini overloaded, retry ${attempt + 1}/${retries} in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 /* ---------- Stripe webhook needs the raw body, so it's registered before express.json() ---------- */
 app.post("/api/stripe-webhook", express.raw({ type: "application/json" }), (req, res) => {
   if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) return res.status(400).send("Stripe not configured.");
@@ -185,7 +203,7 @@ app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
     if (!providers.fileKind(file)) return res.status(415).json({ error: "This file type isn't supported. Use JPG, PNG, WebP, PDF, TXT or CSV." });
 
     const invoice = PROVIDER === "gemini"
-      ? await providers.extractGemini(file, GEMINI_KEY, GEMINI_MODEL)
+      ? await withRetry(() => providers.extractGemini(file, GEMINI_KEY, GEMINI_MODEL))
       : await providers.extractAnthropic(file, anthropicClient, ANTHROPIC_MODEL);
 
     store.recordUse(user.email);
@@ -198,7 +216,7 @@ app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
       if (s === 403) return res.status(500).json({ error: "The Gemini API key was rejected. Check GEMINI_API_KEY in .env." });
       if (s === 404) return res.status(500).json({ error: "Gemini's model name isn't valid anymore (Google renames these sometimes). Update GEMINI_MODEL in .env to a current model name — check https://ai.google.dev/gemini-api/docs/models for the latest." });
       if (s === 429) return res.status(429).json({ error: "Gemini's free-tier limit was hit for now. Wait a minute and try again." });
-      if (s === 503) return res.status(503).json({ error: "Google's servers are unusually busy right now (this is on their end, already retried a couple of times). Wait a minute and try again." });
+      if (s === 503) return res.status(503).json({ error: "Gemini is still busy after a few retries. Please try again in a minute." });
       return res.status(500).json({ error: "Something went wrong while reading this file. " + ((err && err.message) || "") });
     }
     if (s === 401) return res.status(500).json({ error: "The API key was rejected. Check ANTHROPIC_API_KEY in .env." });
