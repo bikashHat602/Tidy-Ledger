@@ -10,7 +10,7 @@ const mailer = require("./mailer");
 const cookieParser = require("cookie-parser");
 
 const PORT = process.env.PORT || 3000;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 const MOCK = process.env.MOCK === "1" || process.argv.includes("--demo"); // demo mode: no API key needed, returns fake data
 const MAX_MB = 10;
@@ -196,6 +196,7 @@ app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
     if (PROVIDER === "gemini") {
       if (s === 400) return res.status(422).json({ error: "This file couldn't be processed. It may be corrupt, unsupported, or too large." });
       if (s === 403) return res.status(500).json({ error: "The Gemini API key was rejected. Check GEMINI_API_KEY in .env." });
+      if (s === 404) return res.status(500).json({ error: "Gemini's model name isn't valid anymore (Google renames these sometimes). Update GEMINI_MODEL in .env to a current model name — check https://ai.google.dev/gemini-api/docs/models for the latest." });
       if (s === 429) return res.status(429).json({ error: "Gemini's free-tier limit was hit for now. Wait a minute and try again." });
       return res.status(500).json({ error: "Something went wrong while reading this file. " + ((err && err.message) || "") });
     }
