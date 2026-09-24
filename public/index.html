@@ -161,6 +161,14 @@ td.del button:hover{color:var(--err)}
       </select>
       <button class="btn ghost small" id="reset" type="button">Reset headings</button>
     </div>
+    <div class="custom" style="margin-top:10px">
+      <button class="btn ghost small" id="saveTemplateBtn" type="button">Save this layout as a template</button>
+      <span style="display:none">
+        <select id="templateSelect" aria-label="Load a saved column template"></select>
+        <button class="btn ghost small" id="loadTemplateBtn" type="button">Load</button>
+        <button class="btn ghost small" id="deleteTemplateBtn" type="button">Delete</button>
+      </span>
+    </div>
   </div>
 
   <div class="block">
@@ -217,6 +225,39 @@ function toNum(v){ if(v===null||v===undefined||v==="")return null; if(typeof v==
   var n=parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isFinite(n)?n:null; }
 function fmt(key,n){ if(n===null)return ""; return key==="quantity"?String(n):n.toFixed(2); }
 function save(){ try{ localStorage.setItem("tidyledger.cols",JSON.stringify({cols:cols,mode:mode,cc:customCount})); }catch(e){} }
+
+/* ---------- #1: keep uploaded/read invoices across an accidental refresh.
+   Uses sessionStorage (clears when the tab closes) since invoice data is
+   sensitive and this is only meant to survive a refresh, not linger forever. */
+var persistTimer=null;
+function persistSession(){
+  try{ sessionStorage.setItem("tidyledger.session", JSON.stringify({invoices:invoices, rows:rows})); }catch(e){}
+}
+function persistSessionDebounced(){ clearTimeout(persistTimer); persistTimer=setTimeout(persistSession,400); }
+function loadSession(){
+  try{
+    var s=JSON.parse(sessionStorage.getItem("tidyledger.session")||"null");
+    if(s && Array.isArray(s.invoices) && s.invoices.length){
+      invoices=s.invoices; rows=Array.isArray(s.rows)?s.rows:[];
+      invoices.forEach(function(inv){ var st=addFileRow(inv.file); st.textContent="Restored"; st.className="st ok"; });
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function clearSession(){ try{ sessionStorage.removeItem("tidyledger.session"); }catch(e){} }
+
+/* ---------- #3: save/load named column templates, so a layout you use often
+   doesn't need re-importing or re-adding by hand every time. */
+function templates(){ try{ return JSON.parse(localStorage.getItem("tidyledger.templates")||"{}"); }catch(e){ return {}; } }
+function saveTemplates(t){ try{ localStorage.setItem("tidyledger.templates", JSON.stringify(t)); }catch(e){} }
+function renderTemplateList(){
+  var sel=$("templateSelect"); if(!sel)return;
+  var t=templates(); var names=Object.keys(t).sort();
+  sel.innerHTML="<option value=''>Load a saved template…</option>"+names.map(function(n){ return "<option value=\""+n.replace(/"/g,"&quot;")+"\">"+n+"</option>"; }).join("");
+  sel.parentElement.style.display=names.length?"":"none";
+}
+
 function load(){
   try{
     var s=JSON.parse(localStorage.getItem("tidyledger.cols")||"null");
@@ -307,7 +348,7 @@ function renderTable(){
       var td=document.createElement("td"); if(isNum(c))td.className="n";
       var inp=document.createElement("input"); inp.type="text"; inp.value=r[c.key]===undefined?"":r[c.key];
       inp.setAttribute("aria-label",c.label+", row "+(ri+1));
-      inp.oninput=function(){ r[c.key]=inp.value; };
+      inp.oninput=function(){ r[c.key]=inp.value; persistSessionDebounced(); };
       td.appendChild(inp); tr.appendChild(td);
     });
     var d=document.createElement("td"); d.className="del";
@@ -320,6 +361,7 @@ function renderTable(){
   $("tbl").style.display=rows.length?"table":"none";
   $("xlsx").disabled=!has; $("csv").disabled=!has; $("clear").disabled=!invoices.length;
   renderFlags();
+  persistSession();
 }
 function renderFlags(){
   var ul=$("flags"); ul.innerHTML="";
@@ -575,7 +617,7 @@ $("sample").onclick=function(){
   [s1,s2].forEach(function(s){ checkInvoice(s); invoices.push(s); var st=addFileRow(s.file); st.textContent="Sample loaded"; st.className="st ok"; });
   buildRows(); renderTable(); toast("Sample invoices loaded");
 };
-$("clear").onclick=function(){ invoices=[]; rows=[]; $("files").innerHTML=""; renderTable(); };
+$("clear").onclick=function(){ invoices=[]; rows=[]; $("files").innerHTML=""; clearSession(); renderTable(); };
 
 /* ---------- Column controls ---------- */
 $("customAdd").onclick=function(){
@@ -617,9 +659,36 @@ $("importHeadingsFile").onchange=async function(){
 $("mode").onchange=function(){ mode=this.value; save(); buildRows(); renderTable(); };
 $("reset").onclick=function(){ defaultCols(); $("mode").value=mode; save(); renderPills(); renderAddBack(); buildRows(); renderTable(); };
 
+/* ---------- #3: named column templates ---------- */
+$("saveTemplateBtn").onclick=function(){
+  var name=prompt("Save this column layout as (name it something you'll recognize, e.g. \"Supplier report\"):");
+  if(!name)return; name=name.trim(); if(!name)return;
+  var t=templates();
+  if(t[name] && !confirm("A template named \""+name+"\" already exists. Overwrite it?"))return;
+  t[name]={cols:cols, mode:mode};
+  saveTemplates(t); renderTemplateList(); $("templateSelect").value=name;
+  toast("Saved template \""+name+"\"");
+};
+$("loadTemplateBtn").onclick=function(){
+  var name=$("templateSelect").value; if(!name)return;
+  var t=templates()[name]; if(!t)return;
+  cols=t.cols||cols; mode=t.mode||mode; $("mode").value=mode;
+  save(); renderPills(); renderAddBack(); buildRows(); renderTable();
+  toast("Loaded template \""+name+"\"");
+};
+$("deleteTemplateBtn").onclick=function(){
+  var name=$("templateSelect").value; if(!name)return;
+  if(!confirm("Delete the template \""+name+"\"? This can't be undone."))return;
+  var t=templates(); delete t[name]; saveTemplates(t); renderTemplateList();
+  toast("Deleted template \""+name+"\"");
+};
+
 /* ---------- Start ---------- */
 load(); $("mode").value=mode;
-renderPills(); renderAddBack(); buildRows(); renderTable();
+renderPills(); renderAddBack();
+if(loadSession()){ renderTable(); toast("Restored your invoices from before the refresh."); }
+else { buildRows(); renderTable(); }
+renderTemplateList();
 })();
 </script>
 </body>
