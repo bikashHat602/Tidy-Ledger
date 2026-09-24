@@ -149,7 +149,10 @@ td.del button:hover{color:var(--err)}
     <div class="custom">
       <input id="customName" type="text" placeholder="Add your own heading, e.g. PO number" maxlength="40" aria-label="New heading name">
       <button class="btn ghost small" id="customAdd" type="button">Add heading</button>
+      <button class="btn ghost small" id="importHeadingsBtn" type="button">Import headings from Excel/CSV</button>
+      <input id="importHeadingsFile" type="file" accept=".xlsx,.xls,.csv" hidden>
     </div>
+    <p class="hint">"Import headings" reads only the first row (the column names) of the file you pick — none of its data rows come in. Handy for reusing the layout from a report you already have.</p>
     <div class="modes">
       <label for="mode">Rows in the report:</label>
       <select id="mode">
@@ -581,6 +584,36 @@ $("customAdd").onclick=function(){
   save(); renderPills(); renderTable();
 };
 $("customName").onkeydown=function(e){ if(e.key==="Enter")$("customAdd").click(); };
+
+/* ---------- Import headings from an Excel/CSV file ---------- */
+$("importHeadingsBtn").onclick=function(){ $("importHeadingsFile").click(); };
+$("importHeadingsFile").onchange=async function(){
+  var f=this.files&&this.files[0]; this.value=""; if(!f)return;
+  if(typeof XLSX==="undefined"){ toast("The file reader couldn't load. Check your connection and try again."); return; }
+  try{
+    var buf=await f.arrayBuffer();
+    var wb=XLSX.read(buf,{type:"array"});
+    var sheet=wb.Sheets[wb.SheetNames[0]];
+    var rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+    var headerRow=(rows[0]||[]).map(function(v){ return String(v==null?"":v).trim(); }).filter(Boolean);
+    if(!headerRow.length){ toast("Couldn't find a header row in that file."); return; }
+
+    // Match each heading to a real field by name where possible (case-insensitive),
+    // so imported columns still fill in from your invoices. Anything unmatched
+    // becomes a custom (manually-filled) column, same as "Add heading" does.
+    var byLabelLower={}; STANDARD.forEach(function(c){ byLabelLower[c.label.toLowerCase()]=c.key; });
+    var usedKeys={}; var newCols=[];
+    headerRow.forEach(function(h){
+      var stdKey=byLabelLower[h.toLowerCase()];
+      if(stdKey && !usedKeys[stdKey]){ usedKeys[stdKey]=true; newCols.push({key:stdKey,label:h}); }
+      else { customCount++; var k="c_"+customCount; usedKeys[k]=true; newCols.push({key:k,label:h,custom:true}); }
+    });
+    cols=newCols;
+    save(); renderPills(); renderAddBack(); buildRows(); renderTable();
+    toast("Imported "+headerRow.length+" heading"+(headerRow.length===1?"":"s")+" from "+f.name);
+  }catch(e){ toast("Couldn't read that file. Try an .xlsx, .xls, or .csv export."); }
+};
+
 $("mode").onchange=function(){ mode=this.value; save(); buildRows(); renderTable(); };
 $("reset").onclick=function(){ defaultCols(); $("mode").value=mode; save(); renderPills(); renderAddBack(); buildRows(); renderTable(); };
 
