@@ -165,6 +165,7 @@ app.post("/api/checkout", async (req, res) => {
       customer_email: email,
       line_items: [{ price: PRICE_IDS[plan], quantity: 1 }],
       metadata: { plan, email },
+      subscription_data: { metadata: { plan, email } },
       success_url: (process.env.APP_BASE_URL || "http://localhost:" + PORT) + "/?upgraded=1",
       cancel_url: (process.env.APP_BASE_URL || "http://localhost:" + PORT) + "/?upgraded=0",
     });

@@ -483,6 +483,17 @@ $("upgrade").onclick=async function(){
 };
 refreshAccount();
 
+/* Show a message after returning from Stripe checkout, then clean the URL. */
+(function(){
+  var params=new URLSearchParams(location.search);
+  if(params.has("upgraded")){
+    if(params.get("upgraded")==="1")toast("Payment received — your plan is updating. This can take a few seconds.");
+    else toast("Checkout was cancelled. You're still on the free plan.");
+    history.replaceState(null,"",location.pathname);
+    setTimeout(refreshAccount, 2000); // give the webhook a moment to arrive
+  }
+})();
+
 var sampleFn=null, sampleCaps=null, backend=false;
 (async function(){
   try{
