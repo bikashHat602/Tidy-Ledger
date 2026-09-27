@@ -112,16 +112,22 @@ h2{font-size:clamp(28px,4vw,44px);letter-spacing:-.03em;line-height:1.08;margin:
 .steps span{color:var(--muted);font-size:15.5px}
 
 /* pricing */
-.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;align-items:stretch}
-.plan{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column}
-.plan.main{border:2px solid var(--accent)}
-.plan h3{margin:0;font-size:20px}
-.price{font-size:40px;font-weight:800;letter-spacing:-.03em;margin:8px 0 2px}
-.price small{font-size:15px;font-weight:400;color:var(--muted);letter-spacing:0}
-.plan p{color:var(--muted);margin:0 0 14px;font-size:15px}
-.plan ul{margin:0 0 20px;padding-left:18px;flex:1}
-.plan li{margin-bottom:6px;font-size:15.5px}
-.plan .btn{text-align:center}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch;max-width:1040px;margin:0 auto}
+.plan{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:32px 28px 28px;display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s}
+.plan.main{border-color:var(--ink)}
+.plan:hover{box-shadow:0 6px 20px rgba(20,20,30,.06)}
+.badge{position:absolute;top:-13px;left:28px;background:var(--ink);color:var(--bg);font-size:12px;font-weight:700;letter-spacing:.02em;padding:5px 12px;border-radius:999px}
+.plan h3{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em}
+.plan .desc{color:var(--muted);margin:6px 0 20px;font-size:15px}
+.price-big{font-size:42px;font-weight:800;letter-spacing:-.03em;margin:0 0 22px}
+.price-big small{font-size:14.5px;font-weight:500;color:var(--muted);letter-spacing:0}
+.plan ul{margin:0 0 22px;padding-left:18px;flex:1}
+.plan li{margin-bottom:7px;font-size:15px;color:var(--ink)}
+.plan-cta{display:block;text-align:center;background:var(--ink);color:var(--bg);border:1.5px solid var(--ink);border-radius:999px;padding:14px 0;font:700 15.5px "Bricolage Grotesque",system-ui,sans-serif;text-decoration:none;transition:filter .15s}
+.plan-cta:hover{filter:brightness(1.15)}
+.plan-cta.ghost{background:transparent;color:var(--ink)}
+.plan-cta.ghost:hover{background:var(--ink);color:var(--bg);filter:none}
+.plan-foot{text-align:center;color:var(--muted);font-size:13px;margin:10px 0 0}
 
 details{border-top:1px solid var(--line);padding:16px 0}
 details:last-of-type{border-bottom:1px solid var(--line)}
@@ -223,29 +229,33 @@ footer{padding:40px 0 48px;color:var(--muted);font-size:14px;display:flex;justif
     </section>
 
     <section id="pricing">
-      <h2>Simple pricing</h2>
-      <p class="sub">Start free. Upgrade when you have a monthly stack to process.</p>
+      <h2 style="text-align:center;margin-left:auto;margin-right:auto">Plans that grow with you</h2>
+      <p class="sub" style="text-align:center;margin-left:auto;margin-right:auto">Start free. Upgrade any time — no long-term commitment.</p>
       <div class="plans">
         <div class="plan">
           <h3>Free</h3>
-          <div class="price">$0</div>
-          <p>To try it on real files.</p>
+          <p class="desc">To try it on real files.</p>
+          <div class="price-big">$0</div>
           <ul><li>5 invoices per day</li><li>Export to CSV</li><li>Review and edit screen</li></ul>
-          <a class="btn ghost" href="#" data-cta>Start free</a>
+          <a class="plan-cta ghost" href="#" data-cta>Start free</a>
+          <p class="plan-foot">No card required</p>
         </div>
         <div class="plan main">
+          <span class="badge">Most popular</span>
           <h3>Pro</h3>
-          <div class="price">$12<small> / month</small></div>
-          <p>For freelancers and small teams.</p>
+          <p class="desc">For freelancers and small teams.</p>
+          <div class="price-big">$12<small> USD / month</small></div>
           <ul><li>Unlimited invoices</li><li>Bulk upload</li><li>Excel export and saved report layouts</li><li>Duplicate invoice detection</li></ul>
-          <a class="btn" href="#" data-cta>Start Pro trial</a>
+          <a class="plan-cta" href="#" data-cta>Get Pro plan</a>
+          <p class="plan-foot">No commitment · Cancel anytime</p>
         </div>
         <div class="plan">
           <h3>Business</h3>
-          <div class="price">$39<small> / month</small></div>
-          <p>For firms handling many clients.</p>
+          <p class="desc">For firms handling many clients.</p>
+          <div class="price-big">$39<small> USD / month</small></div>
           <ul><li>Everything in Pro</li><li>Up to 5 team members</li><li>Client folders</li><li>API access</li></ul>
-          <a class="btn ghost" href="#" data-cta>Contact us</a>
+          <a class="plan-cta ghost" href="#" data-cta>Get Business plan</a>
+          <p class="plan-foot">No commitment · Cancel anytime</p>
         </div>
       </div>
     </section>
