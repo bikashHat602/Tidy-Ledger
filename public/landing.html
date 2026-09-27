@@ -61,7 +61,7 @@ h1{font-size:clamp(38px,6.4vw,74px);line-height:1.02;letter-spacing:-.035em;font
 .lead{font-size:clamp(18px,2.2vw,21px);color:var(--muted);max-width:52ch;margin:0 0 26px}
 .cta-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .video-wrap{position:fixed;top:16px;right:16px;width:38vw;max-width:384px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--surface);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.25);z-index:40}
-.video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.video-wrap iframe,.video-wrap video{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
 .video-wrap .video-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .video-wrap .video-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;border:0;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s}
 .video-wrap:hover .video-play{transform:translate(-50%,-50%) scale(1.08)}
@@ -167,7 +167,7 @@ footer{padding:40px 0 48px;color:var(--muted);font-size:14px;display:flex;justif
         <a class="btn" href="#" data-cta>Clean 5 invoices free</a>
         <a class="btn ghost" href="#demo">See it work</a>
       </div>
-      <div class="video-wrap" id="howToVideo" data-video="Mlj3p5gMpfk"></div>
+      <div class="video-wrap" id="howToVideo" data-src="media/how-to-use.mp4" data-poster="media/how-to-use-poster.jpg"></div>
       <p class="fine">No card needed. Files are deleted after processing.</p>
     </div>
 
@@ -279,21 +279,24 @@ footer{padding:40px 0 48px;color:var(--muted);font-size:14px;display:flex;justif
 var APP_URL = "/index.html";
 document.querySelectorAll("[data-cta]").forEach(function(a){ a.setAttribute("href", APP_URL); });
 
-function initLiteYoutube(el){
-  var id = el.dataset.video; if (!id) return;
+function initLiteVideo(el){
+  var src = el.dataset.src; if (!src) return;
+  var poster = el.dataset.poster;
   var img = document.createElement("img");
   img.className = "video-poster"; img.loading = "lazy"; img.alt = "How TidyLedger works — click to play";
-  img.src = "https://img.youtube.com/vi/" + id + "/maxresdefault.jpg";
-  img.onerror = function(){ img.onerror = null; img.src = "https://img.youtube.com/vi/" + id + "/hqdefault.jpg"; };
+  if (poster) img.src = poster;
   var play = document.createElement("button");
   play.type = "button"; play.className = "video-play"; play.setAttribute("aria-label", "Play video"); play.textContent = "▶";
   el.appendChild(img); el.appendChild(play);
   el.addEventListener("click", function go(){
     el.removeEventListener("click", go);
-    el.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0" title="How TidyLedger works" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+    var v = document.createElement("video");
+    v.src = src; if (poster) v.poster = poster;
+    v.controls = true; v.autoplay = true; v.playsInline = true;
+    el.innerHTML = ""; el.appendChild(v);
   }, { once: true });
 }
-document.querySelectorAll(".video-wrap[data-video]").forEach(initLiteYoutube);
+document.querySelectorAll(".video-wrap[data-src]").forEach(initLiteVideo);
 
 var rows = [
   ["Thermal paper rolls","2","450.00","900.00","r1"],
