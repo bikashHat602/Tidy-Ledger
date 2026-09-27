@@ -41,8 +41,11 @@ html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
 [hidden]{display:none !important} /* keeps hidden working even on flex/block elements */
 .video-toggle{margin:14px 0 0}
-.video-wrap{position:relative;width:100%;max-width:640px;aspect-ratio:16/9;margin-top:14px;border-radius:10px;overflow:hidden;background:var(--soft)}
+.video-wrap{position:relative;width:100%;max-width:640px;aspect-ratio:16/9;margin-top:14px;border-radius:10px;overflow:hidden;background:var(--soft);cursor:pointer}
 .video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.video-wrap .video-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.video-wrap .video-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:68px;height:68px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;border:0;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.video-wrap:hover .video-play{transform:translate(-50%,-50%) scale(1.08)}
 body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
   font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -120,8 +123,8 @@ td.del button:hover{color:var(--err)}
   <header><div class="logo"><span>Tidy</span>Ledger</div></header>
   <h1>Turn messy business documents into clean Excel reports in minutes</h1>
   <p class="lead">Upload your invoices, choose the columns you want, fix anything that looks off, then download one clean Excel file.</p>
-  <button class="btn ghost video-toggle" id="howToBtn" type="button">📹 How to use this (short video)</button>
-  <div class="video-wrap" id="howToVideo" hidden></div>
+  <p class="video-toggle" style="margin:14px 0 6px;font-weight:600;color:var(--ink)">📹 How to use this</p>
+  <div class="video-wrap" id="howToVideo" data-video="Mlj3p5gMpfk"></div>
 
   <div class="block">
     <h2>Your account</h2>
@@ -707,19 +710,24 @@ $("deleteTemplateBtn").onclick=function(){
   toast("Deleted template \""+name+"\"");
 };
 
-/* ---------- How-to video (lazy-loaded, only fetches from YouTube once opened) ---------- */
-$("howToBtn").onclick=function(){
-  var box=$("howToVideo");
-  if(box.hidden){
-    if(!box.dataset.loaded){
-      box.innerHTML='<iframe src="https://www.youtube.com/embed/Mlj3p5gMpfk" title="How to use TidyLedger" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
-      box.dataset.loaded="1";
-    }
-    box.hidden=false; this.textContent="Hide video";
-  } else {
-    box.hidden=true; this.textContent="📹 How to use this (short video)";
-  }
-};
+/* ---------- How-to video: thumbnail that plays on the first click, no extra
+   step. Uses youtube-nocookie.com + autoplay, which usually avoids YouTube's
+   occasional "confirm you're not a bot" interstitial on embedded players. ---------- */
+function initLiteYoutube(el){
+  var id=el.dataset.video; if(!id)return;
+  var img=document.createElement("img");
+  img.className="video-poster"; img.loading="lazy"; img.alt="How to use TidyLedger — click to play";
+  img.src="https://img.youtube.com/vi/"+id+"/maxresdefault.jpg";
+  img.onerror=function(){ img.onerror=null; img.src="https://img.youtube.com/vi/"+id+"/hqdefault.jpg"; };
+  var play=document.createElement("button");
+  play.type="button"; play.className="video-play"; play.setAttribute("aria-label","Play video"); play.textContent="▶";
+  el.appendChild(img); el.appendChild(play);
+  el.addEventListener("click", function go(){
+    el.removeEventListener("click", go);
+    el.innerHTML='<iframe src="https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&rel=0" title="How to use TidyLedger" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+  }, {once:true});
+}
+document.querySelectorAll(".video-wrap[data-video]").forEach(initLiteYoutube);
 
 /* ---------- Start ---------- */
 load(); $("mode").value=mode;
