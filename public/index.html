@@ -139,6 +139,7 @@ td.del button:hover{color:var(--err)}
     <div class="custom" style="margin-bottom:6px" id="loggedRow" hidden>
       <button class="btn ghost small" id="logout" type="button">Log out</button>
       <button class="btn ghost small" id="upgrade" type="button" hidden>Upgrade to Pro</button>
+      <button class="btn ghost small" id="upgradeBiz" type="button" hidden>Upgrade to Business</button>
     </div>
   </div>
 
@@ -438,13 +439,14 @@ $("csv").onclick=function(){
 
 /* ---------- Extraction (uses Claude through the page's sample capability) ---------- */
 /* ---------- account ---------- */
-var userEmail="", loggedIn=false;
-function updateRemaining(n){
-  if(n===null)$("acctHint").textContent="Signed in as "+userEmail+". You're on the Pro plan: unlimited invoices.";
+var userEmail="", loggedIn=false, userPlan="free";
+function updateRemaining(n, plan){
+  if(plan==="business")$("acctHint").textContent="Signed in as "+userEmail+". You're on the Business plan: unlimited invoices, up to 5 team members.";
+  else if(n===null)$("acctHint").textContent="Signed in as "+userEmail+". You're on the Pro plan: unlimited invoices.";
   else $("acctHint").textContent="Signed in as "+userEmail+". "+n+" free invoice"+(n===1?"":"s")+" left today.";
 }
 function showLoggedOut(msg){
-  loggedIn=false; userEmail="";
+  loggedIn=false; userEmail=""; userPlan="free";
   $("loginRow").hidden=false; $("loggedRow").hidden=true;
   $("acctHint").textContent=msg||"Log in with your email to start. The free plan includes 5 invoices a day.";
 }
@@ -453,9 +455,12 @@ async function refreshAccount(){
     var r=await fetch("/api/account",{credentials:"include"});
     if(!r.ok){ showLoggedOut(); return; }
     var j=await r.json();
-    userEmail=j.email; loggedIn=true;
+    userEmail=j.email; loggedIn=true; userPlan=j.plan;
     $("loginRow").hidden=true; $("loggedRow").hidden=false;
-    updateRemaining(j.remainingToday); $("upgrade").hidden=(j.plan!=="free");
+    updateRemaining(j.remainingToday, j.plan);
+    $("upgrade").hidden=(j.plan!=="free");
+    $("upgradeBiz").hidden=(j.plan==="business");
+    maybeAutoCheckout();
   }catch(e){ showLoggedOut(); }
 }
 $("emailSave").onclick=async function(){
@@ -483,15 +488,33 @@ $("logout").onclick=async function(){
   try{ await fetch("/api/logout",{method:"POST",credentials:"include"}); }catch(e){}
   showLoggedOut("Logged out. Log in again to continue.");
 };
-$("upgrade").onclick=async function(){
+function startCheckout(plan){
   if(!loggedIn){ toast("Log in first."); return; }
-  try{
-    var r=await fetch("/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({plan:"pro"})});
-    var j=await r.json();
-    if(!r.ok)throw new Error(j.error||"Could not start checkout.");
-    location.href=j.url;
-  }catch(e){ toast(e.message); }
-};
+  fetch("/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({plan:plan})})
+    .then(function(r){ return r.json().then(function(j){ if(!r.ok)throw new Error(j.error||"Could not start checkout."); return j; }); })
+    .then(function(j){ location.href=j.url; })
+    .catch(function(e){ toast(e.message); });
+}
+$("upgrade").onclick=function(){ startCheckout("pro"); };
+$("upgradeBiz").onclick=function(){ startCheckout("business"); };
+/* If the person arrived from a landing-page plan button (?plan=pro or
+   ?plan=business), remember that choice through login (including the
+   emailed magic-link redirect, which drops query params) and start that
+   checkout automatically once we know they're logged in. */
+(function(){
+  var plan=new URLSearchParams(location.search).get("plan");
+  if(plan==="pro"||plan==="business"){
+    try{ localStorage.setItem("tl_pendingPlan", plan); }catch(e){}
+    history.replaceState(null,"",location.pathname);
+  }
+})();
+function maybeAutoCheckout(){
+  var plan; try{ plan=localStorage.getItem("tl_pendingPlan"); }catch(e){ plan=null; }
+  if(!plan || !loggedIn) return;
+  try{ localStorage.removeItem("tl_pendingPlan"); }catch(e){}
+  if(plan===userPlan || userPlan==="business") return;
+  startCheckout(plan);
+}
 refreshAccount();
 
 /* Show a message after returning from Stripe checkout, then clean the URL. */

@@ -241,14 +241,14 @@ footer{padding:40px 0 48px;color:var(--muted);font-size:14px;display:flex;justif
           <div class="price">$12<small> / month</small></div>
           <p>For freelancers and small teams.</p>
           <ul><li>Unlimited invoices</li><li>Bulk upload</li><li>Excel export and saved report layouts</li><li>Duplicate invoice detection</li></ul>
-          <a class="btn" href="#" data-cta>Start Pro trial</a>
+          <a class="btn" href="#" data-cta data-plan="pro">Start Pro trial</a>
         </div>
         <div class="plan">
           <h3>Business</h3>
           <div class="price">$39<small> / month</small></div>
           <p>For firms handling many clients.</p>
           <ul><li>Everything in Pro</li><li>Up to 5 team members</li><li>Client folders</li><li>API access</li></ul>
-          <a class="btn ghost" href="#" data-cta>Contact us</a>
+          <a class="btn ghost" href="#" data-cta data-plan="business">Start Business trial</a>
         </div>
       </div>
     </section>
@@ -279,7 +279,10 @@ footer{padding:40px 0 48px;color:var(--muted);font-size:14px;display:flex;justif
 <script>
 /* Replace with your real app link, e.g. "https://yourdomain.com/app" */
 var APP_URL = "/index.html";
-document.querySelectorAll("[data-cta]").forEach(function(a){ a.setAttribute("href", APP_URL); });
+document.querySelectorAll("[data-cta]").forEach(function(a){
+  var plan=a.dataset.plan;
+  a.setAttribute("href", APP_URL + (plan ? "?plan=" + encodeURIComponent(plan) : ""));
+});
 
 function initLiteVideo(el){
   var src = el.dataset.src; if (!src) return;
