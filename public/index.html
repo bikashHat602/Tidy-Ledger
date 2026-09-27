@@ -40,6 +40,9 @@
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
 [hidden]{display:none !important} /* keeps hidden working even on flex/block elements */
+.video-toggle{margin:14px 0 0}
+.video-wrap{position:relative;width:100%;max-width:640px;aspect-ratio:16/9;margin-top:14px;border-radius:10px;overflow:hidden;background:var(--soft)}
+.video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
   font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -117,6 +120,8 @@ td.del button:hover{color:var(--err)}
   <header><div class="logo"><span>Tidy</span>Ledger</div></header>
   <h1>Turn messy business documents into clean Excel reports in minutes</h1>
   <p class="lead">Upload your invoices, choose the columns you want, fix anything that looks off, then download one clean Excel file.</p>
+  <button class="btn ghost video-toggle" id="howToBtn" type="button">📹 How to use this (short video)</button>
+  <div class="video-wrap" id="howToVideo" hidden></div>
 
   <div class="block">
     <h2>Your account</h2>
@@ -700,6 +705,20 @@ $("deleteTemplateBtn").onclick=function(){
   if(!confirm("Delete the template \""+name+"\"? This can't be undone."))return;
   var t=templates(); delete t[name]; saveTemplates(t); renderTemplateList();
   toast("Deleted template \""+name+"\"");
+};
+
+/* ---------- How-to video (lazy-loaded, only fetches from YouTube once opened) ---------- */
+$("howToBtn").onclick=function(){
+  var box=$("howToVideo");
+  if(box.hidden){
+    if(!box.dataset.loaded){
+      box.innerHTML='<iframe src="https://www.youtube.com/embed/Mlj3p5gMpfk" title="How to use TidyLedger" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+      box.dataset.loaded="1";
+    }
+    box.hidden=false; this.textContent="Hide video";
+  } else {
+    box.hidden=true; this.textContent="📹 How to use this (short video)";
+  }
 };
 
 /* ---------- Start ---------- */
