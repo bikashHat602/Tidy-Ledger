@@ -41,11 +41,14 @@ html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
 [hidden]{display:none !important} /* keeps hidden working even on flex/block elements */
 .video-toggle{margin:14px 0 0}
-.video-wrap{position:relative;width:100%;max-width:640px;aspect-ratio:16/9;margin-top:14px;border-radius:10px;overflow:hidden;background:var(--soft);cursor:pointer}
-.video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.video-wrap{position:fixed;top:16px;right:16px;width:38vw;max-width:384px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--soft);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.25);z-index:40}
+.video-wrap iframe,.video-wrap video{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}
 .video-wrap .video-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.video-wrap .video-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:68px;height:68px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;border:0;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.video-wrap .video-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;border:0;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s}
 .video-wrap:hover .video-play{transform:translate(-50%,-50%) scale(1.08)}
+.video-wrap .video-close{position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;border:0;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5;transition:background .15s}
+.video-wrap .video-close:hover{background:rgba(0,0,0,.85)}
+@media (max-width:640px){.video-wrap{position:relative;top:auto;right:auto;width:100%;max-width:384px;margin:14px auto 0;box-shadow:none}}
 body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
   font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -124,7 +127,7 @@ td.del button:hover{color:var(--err)}
   <h1>Turn messy business documents into clean Excel reports in minutes</h1>
   <p class="lead">Upload your invoices, choose the columns you want, fix anything that looks off, then download one clean Excel file.</p>
   <p class="video-toggle" style="margin:14px 0 6px;font-weight:600;color:var(--ink)">📹 How to use this</p>
-  <div class="video-wrap" id="howToVideo" data-video="Mlj3p5gMpfk"></div>
+  <div class="video-wrap" id="howToVideo" data-src="media/how-to-use.mp4" data-poster="media/how-to-use-poster.jpg"></div>
 
   <div class="block">
     <h2>Your account</h2>
@@ -136,6 +139,7 @@ td.del button:hover{color:var(--err)}
     <div class="custom" style="margin-bottom:6px" id="loggedRow" hidden>
       <button class="btn ghost small" id="logout" type="button">Log out</button>
       <button class="btn ghost small" id="upgrade" type="button" hidden>Upgrade to Pro</button>
+      <button class="btn ghost small" id="upgradeBiz" type="button" hidden>Upgrade to Business</button>
     </div>
   </div>
 
@@ -435,13 +439,14 @@ $("csv").onclick=function(){
 
 /* ---------- Extraction (uses Claude through the page's sample capability) ---------- */
 /* ---------- account ---------- */
-var userEmail="", loggedIn=false;
-function updateRemaining(n){
-  if(n===null)$("acctHint").textContent="Signed in as "+userEmail+". You're on the Pro plan: unlimited invoices.";
+var userEmail="", loggedIn=false, userPlan="free";
+function updateRemaining(n, plan){
+  if(plan==="business")$("acctHint").textContent="Signed in as "+userEmail+". You're on the Business plan: unlimited invoices, up to 5 team members.";
+  else if(n===null)$("acctHint").textContent="Signed in as "+userEmail+". You're on the Pro plan: unlimited invoices.";
   else $("acctHint").textContent="Signed in as "+userEmail+". "+n+" free invoice"+(n===1?"":"s")+" left today.";
 }
 function showLoggedOut(msg){
-  loggedIn=false; userEmail="";
+  loggedIn=false; userEmail=""; userPlan="free";
   $("loginRow").hidden=false; $("loggedRow").hidden=true;
   $("acctHint").textContent=msg||"Log in with your email to start. The free plan includes 5 invoices a day.";
 }
@@ -450,9 +455,12 @@ async function refreshAccount(){
     var r=await fetch("/api/account",{credentials:"include"});
     if(!r.ok){ showLoggedOut(); return; }
     var j=await r.json();
-    userEmail=j.email; loggedIn=true;
+    userEmail=j.email; loggedIn=true; userPlan=j.plan;
     $("loginRow").hidden=true; $("loggedRow").hidden=false;
-    updateRemaining(j.remainingToday); $("upgrade").hidden=(j.plan!=="free");
+    updateRemaining(j.remainingToday, j.plan);
+    $("upgrade").hidden=(j.plan!=="free");
+    $("upgradeBiz").hidden=(j.plan==="business");
+    maybeAutoCheckout();
   }catch(e){ showLoggedOut(); }
 }
 $("emailSave").onclick=async function(){
@@ -480,15 +488,33 @@ $("logout").onclick=async function(){
   try{ await fetch("/api/logout",{method:"POST",credentials:"include"}); }catch(e){}
   showLoggedOut("Logged out. Log in again to continue.");
 };
-$("upgrade").onclick=async function(){
+function startCheckout(plan){
   if(!loggedIn){ toast("Log in first."); return; }
-  try{
-    var r=await fetch("/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({plan:"pro"})});
-    var j=await r.json();
-    if(!r.ok)throw new Error(j.error||"Could not start checkout.");
-    location.href=j.url;
-  }catch(e){ toast(e.message); }
-};
+  fetch("/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({plan:plan})})
+    .then(function(r){ return r.json().then(function(j){ if(!r.ok)throw new Error(j.error||"Could not start checkout."); return j; }); })
+    .then(function(j){ location.href=j.url; })
+    .catch(function(e){ toast(e.message); });
+}
+$("upgrade").onclick=function(){ startCheckout("pro"); };
+$("upgradeBiz").onclick=function(){ startCheckout("business"); };
+/* If the person arrived from a landing-page plan button (?plan=pro or
+   ?plan=business), remember that choice through login (including the
+   emailed magic-link redirect, which drops query params) and start that
+   checkout automatically once we know they're logged in. */
+(function(){
+  var plan=new URLSearchParams(location.search).get("plan");
+  if(plan==="pro"||plan==="business"){
+    try{ localStorage.setItem("tl_pendingPlan", plan); }catch(e){}
+    history.replaceState(null,"",location.pathname);
+  }
+})();
+function maybeAutoCheckout(){
+  var plan; try{ plan=localStorage.getItem("tl_pendingPlan"); }catch(e){ plan=null; }
+  if(!plan || !loggedIn) return;
+  try{ localStorage.removeItem("tl_pendingPlan"); }catch(e){}
+  if(plan===userPlan || userPlan==="business") return;
+  startCheckout(plan);
+}
 refreshAccount();
 
 /* Show a message after returning from Stripe checkout, then clean the URL. */
@@ -710,24 +736,37 @@ $("deleteTemplateBtn").onclick=function(){
   toast("Deleted template \""+name+"\"");
 };
 
-/* ---------- How-to video: thumbnail that plays on the first click, no extra
-   step. Uses youtube-nocookie.com + autoplay, which usually avoids YouTube's
-   occasional "confirm you're not a bot" interstitial on embedded players. ---------- */
-function initLiteYoutube(el){
-  var id=el.dataset.video; if(!id)return;
+/* ---------- How-to video: self-hosted mp4, thumbnail that plays on the
+   first click. No YouTube dependency, so no "confirm you're not a bot"
+   interstitial. ---------- */
+function initLiteVideo(el){
+  var src=el.dataset.src; if(!src)return;
+  var poster=el.dataset.poster;
+  function addClose(){
+    var close=document.createElement("button");
+    close.type="button"; close.className="video-close"; close.setAttribute("aria-label","Close video"); close.textContent="✕";
+    close.addEventListener("click", function(e){
+      e.stopPropagation();
+      var v=el.querySelector("video"); if(v) v.pause();
+      el.style.display="none";
+    });
+    el.appendChild(close);
+  }
   var img=document.createElement("img");
   img.className="video-poster"; img.loading="lazy"; img.alt="How to use TidyLedger — click to play";
-  img.src="https://img.youtube.com/vi/"+id+"/maxresdefault.jpg";
-  img.onerror=function(){ img.onerror=null; img.src="https://img.youtube.com/vi/"+id+"/hqdefault.jpg"; };
+  if(poster) img.src=poster;
   var play=document.createElement("button");
   play.type="button"; play.className="video-play"; play.setAttribute("aria-label","Play video"); play.textContent="▶";
-  el.appendChild(img); el.appendChild(play);
+  el.appendChild(img); el.appendChild(play); addClose();
   el.addEventListener("click", function go(){
     el.removeEventListener("click", go);
-    el.innerHTML='<iframe src="https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&rel=0" title="How to use TidyLedger" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+    var v=document.createElement("video");
+    v.src=src; if(poster) v.poster=poster;
+    v.controls=true; v.autoplay=true; v.playsInline=true;
+    el.innerHTML=""; el.appendChild(v); addClose();
   }, {once:true});
 }
-document.querySelectorAll(".video-wrap[data-video]").forEach(initLiteYoutube);
+document.querySelectorAll(".video-wrap[data-src]").forEach(initLiteVideo);
 
 /* ---------- Start ---------- */
 load(); $("mode").value=mode;
