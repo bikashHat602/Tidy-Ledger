@@ -126,8 +126,12 @@ td.del button:hover{color:var(--err)}
   <header><div class="logo"><span>Tidy</span>Ledger</div></header>
   <h1>Turn messy business documents into clean Excel reports in minutes</h1>
   <p class="lead">Upload your invoices, choose the columns you want, fix anything that looks off, then download one clean Excel file.</p>
-  <p class="video-toggle" style="margin:14px 0 6px;font-weight:600;color:var(--ink)">📹 How to use this</p>
-  <div class="video-wrap" id="howToVideo" data-src="media/how-to-use.mp4" data-poster="media/how-to-use-poster.jpg"></div>
+  <p class="video-toggle" style="margin:14px 0 6px;font-weight:600;color:var(--ink)" hidden>📹 How to use this</p>
+  <div class="video-wrap" id="howToVideo" data-src="media/how-to-use.mp4" data-poster="media/how-to-use-poster.jpg" hidden></div>
+  <!-- Hidden for now: this video's content doesn't match the real app (looks
+       AI-generated, with garbled text and made-up buttons). Replace media/how-to-use.mp4
+       and media/how-to-use-poster.jpg with a real screen recording, then remove
+       the two "hidden" attributes above to show it again. -->
 
   <div class="block">
     <h2>Your account</h2>
