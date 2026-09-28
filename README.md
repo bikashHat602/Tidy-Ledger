@@ -51,7 +51,7 @@ Visitors log in with an emailed magic link — no passwords to store or leak. Th
 1. They type their email and click "Send login link."
 2. They get an email with a link that logs them in for 30 days (a secure cookie, not a
    plain-text email like before). Only someone with access to that inbox can log in as them.
-3. Free plan: 5 invoices per day per account. Pro and Business are unlimited.
+3. Free plan: 50 invoices per calendar month per account, with a daily burst cap of 20 (change with FREE_MONTHLY_LIMIT / FREE_DAILY_LIMIT in .env). Pro and Business are unlimited.
 
 **Local testing without an email server:** if `SMTP_HOST` isn't set in `.env`, the login link
 is shown directly in the app and printed to the server console instead of emailed, so you can

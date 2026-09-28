@@ -135,7 +135,7 @@ td.del button:hover{color:var(--err)}
 
   <div class="block">
     <h2>Your account</h2>
-    <p class="hint" id="acctHint">Log in with your email to start. The free plan includes 5 invoices a day.</p>
+    <p class="hint" id="acctHint">Log in with your email to start. The free plan includes 50 invoices a month.</p>
     <div class="custom" style="margin-bottom:6px" id="loginRow">
       <input id="email" type="email" placeholder="you@example.com" aria-label="Email address" autocomplete="email">
       <button class="btn ghost small" id="emailSave" type="button">Send login link</button>
@@ -444,15 +444,20 @@ $("csv").onclick=function(){
 /* ---------- Extraction (uses Claude through the page's sample capability) ---------- */
 /* ---------- account ---------- */
 var userEmail="", loggedIn=false, userPlan="free";
-function updateRemaining(n, plan){
+var FREE_MONTHLY_LABEL=50;
+function updateRemaining(n, plan, dayLeft){
   if(plan==="business")$("acctHint").textContent="Signed in as "+userEmail+". You're on the Business plan: unlimited invoices, up to 5 team members.";
   else if(n===null)$("acctHint").textContent="Signed in as "+userEmail+". You're on the Pro plan: unlimited invoices.";
-  else $("acctHint").textContent="Signed in as "+userEmail+". "+n+" free invoice"+(n===1?"":"s")+" left today.";
+  else {
+    var t="Signed in as "+userEmail+". "+n+" free invoice"+(n===1?"":"s")+" left this month";
+    if(typeof dayLeft==="number"&&dayLeft<n)t+=" ("+dayLeft+" left today)";
+    $("acctHint").textContent=t+".";
+  }
 }
 function showLoggedOut(msg){
   loggedIn=false; userEmail=""; userPlan="free";
   $("loginRow").hidden=false; $("loggedRow").hidden=true;
-  $("acctHint").textContent=msg||"Log in with your email to start. The free plan includes 5 invoices a day.";
+  $("acctHint").textContent=msg||"Log in with your email to start. The free plan includes 50 invoices a month.";
 }
 async function refreshAccount(){
   try{
@@ -461,7 +466,7 @@ async function refreshAccount(){
     var j=await r.json();
     userEmail=j.email; loggedIn=true; userPlan=j.plan;
     $("loginRow").hidden=true; $("loggedRow").hidden=false;
-    updateRemaining(j.remainingToday, j.plan);
+    updateRemaining(j.remainingMonth, j.plan, j.remainingToday);
     $("upgrade").hidden=(j.plan!=="free");
     $("upgradeBiz").hidden=(j.plan==="business");
     maybeAutoCheckout();
@@ -583,7 +588,7 @@ async function extractViaServer(file){
     var err=new Error(j.error||"The server could not read this file.");
     err.code=j.code; throw err;
   }
-  if(j.remainingToday!==undefined&&j.remainingToday!==null)updateRemaining(j.remainingToday);
+  if(j.remainingMonth!==undefined&&j.remainingMonth!==null)updateRemaining(j.remainingMonth, userPlan, j.remainingToday);
   return normalize(j.invoice,file.name);
 }
 async function extractOne(file){

@@ -148,8 +148,8 @@ app.get("/api/account", (req, res) => {
   const email = auth.currentEmail(req);
   if (!email) return res.status(401).json({ error: "Not logged in." });
   const user = store.getUser(email);
-  const remaining = store.remaining(user);
-  res.json({ email: user.email, plan: user.plan, remainingToday: remaining === Infinity ? null : remaining });
+  const q = store.quota(user);
+  res.json({ email: user.email, plan: user.plan, remainingMonth: q.unlimited ? null : q.monthLeft, remainingToday: q.unlimited ? null : q.dayLeft });
 });
 
 /* ---------- Stripe checkout (needs STRIPE_SECRET_KEY + price IDs in .env) ---------- */
@@ -195,11 +195,14 @@ app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
     const email = auth.currentEmail(req);
     if (!email) return res.status(401).json({ error: "Log in first, then upload your invoice.", code: "not_logged_in" });
     const user = store.getUser(email);
-    const left = store.remaining(user);
-    if (left !== Infinity && left <= 0) {
-      return res.status(402).json({ error: "You've used today's " + store.PLAN_LIMITS.free + " free invoices. Upgrade to Pro for unlimited invoices.", code: "limit_reached" });
+    const q = store.quota(user);
+    if (!q.unlimited && q.left <= 0) {
+      const msg = q.blockedBy === "month"
+        ? "You've used all " + store.FREE_MONTHLY + " free invoices for this month. Upgrade to Pro for unlimited invoices, or come back next month."
+        : "You've hit today's limit of " + store.FREE_DAILY + " invoices (free plan). It resets tomorrow — or upgrade to Pro for unlimited invoices.";
+      return res.status(402).json({ error: msg, code: "limit_reached" });
     }
-    if (MOCK) { store.recordUse(user.email); return res.json({ invoice: mockInvoice(file.originalname), remainingToday: store.remaining(user) }); }
+    if (MOCK) { store.recordUse(user.email); const q2 = store.quota(store.getUser(user.email)); return res.json({ invoice: mockInvoice(file.originalname), remainingMonth: q2.unlimited ? null : q2.monthLeft, remainingToday: q2.unlimited ? null : q2.dayLeft }); }
     if (PROVIDER === "none") return res.status(500).json({ error: "The server has no AI provider configured. Add GEMINI_API_KEY (free) or ANTHROPIC_API_KEY to .env and restart." });
     if (!providers.fileKind(file)) return res.status(415).json({ error: "This file type isn't supported. Use JPG, PNG, WebP, PDF, TXT or CSV." });
 
@@ -208,7 +211,8 @@ app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
       : await providers.extractAnthropic(file, anthropicClient, ANTHROPIC_MODEL);
 
     store.recordUse(user.email);
-    res.json({ invoice, remainingToday: store.remaining(user), provider: PROVIDER });
+    const q3 = store.quota(store.getUser(user.email)); // re-read: the count changed after recordUse
+    res.json({ invoice, remainingMonth: q3.unlimited ? null : q3.monthLeft, remainingToday: q3.unlimited ? null : q3.dayLeft, provider: PROVIDER });
   } catch (err) {
     console.error("extract error [" + PROVIDER + "]:", err && err.status, err && err.message);
     const s = err && err.status;
