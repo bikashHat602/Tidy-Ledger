@@ -53,10 +53,17 @@ Visitors log in with an emailed magic link — no passwords to store or leak. Th
    plain-text email like before). Only someone with access to that inbox can log in as them.
 3. Free plan: 50 invoices per calendar month per account, with a daily burst cap of 20 (change with FREE_MONTHLY_LIMIT / FREE_DAILY_LIMIT in .env). Pro and Business are unlimited.
 
-**Local testing without an email server:** if `SMTP_HOST` isn't set in `.env`, the login link
-is shown directly in the app and printed to the server console instead of emailed, so you can
-test the whole flow without setting up SMTP first. Set real SMTP details (e.g. Gmail app
-password, Postmark, Resend, SendGrid) before real users sign up.
+**Sending the login emails.** Pick one (set in `.env`, or in your host's Environment tab):
+
+- **Brevo HTTPS API (recommended, and the only free option on Render):** Render's free plan blocks
+  all outbound SMTP ports (25/465/587), so Gmail/SMTP cannot work there. Brevo's free plan sends 300
+  emails/day over HTTPS. Set `BREVO_API_KEY` and `MAIL_FROM_EMAIL` (an address you have verified
+  in Brevo under *Senders & IP > Senders*, e.g. your Gmail).
+- **SMTP:** `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS` — fine on your own computer or a paid host.
+- **Neither set (testing only):** the login link is shown directly on the page, so anyone can log in
+  as any email. Never leave it like this once real users sign up.
+
+The server prints which mode it is in when it starts.
 
 **Before going live**, set `SESSION_SECRET` in `.env` to a long random string (this signs the
 login/session tokens — treat it like a password). Usage and accounts are stored in `data.json`

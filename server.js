@@ -129,7 +129,7 @@ app.post("/api/login", loginLimiter, async (req, res) => {
     res.json({ sent: true });
   } catch (err) {
     console.error("login email error:", err.message);
-    res.status(500).json({ error: "Could not send the login email. Check your SMTP settings in .env." });
+    res.status(500).json({ error: "Could not send the login email. Check the email settings (BREVO_API_KEY and MAIL_FROM_EMAIL) on the server." });
   }
 });
 
@@ -243,6 +243,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.listen(PORT, () => {
   console.log(`TidyLedger running at http://localhost:${PORT}`);
+  console.log(mailer.mode === "brevo" ? "Login emails: Brevo API (from " + (process.env.MAIL_FROM_EMAIL || "?") + ")." : mailer.mode === "smtp" ? "Login emails: SMTP." : "WARNING: no email provider set — login links are shown on the page (testing only). Set BREVO_API_KEY + MAIL_FROM_EMAIL before real users sign up.");
   console.log(
     MOCK ? "Demo mode: fake data, no API key needed."
     : PROVIDER === "gemini" ? `Using Gemini (free tier), model ${GEMINI_MODEL}.`
