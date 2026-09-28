@@ -56,4 +56,27 @@ function setPlan(email, plan) {
   write(db);
   return db.users[email];
 }
-module.exports = { getUser, usageToday, usageMonth, quota, remaining, recordUse, setPlan, PLAN_LIMITS, FREE_MONTHLY, FREE_DAILY };
+// Per-supplier corrections the user chose to remember ("correct once, improve future invoices").
+const HINT_FIELDS = ["invoice_no", "supplier", "bill_to", "invoice_date", "due_date", "currency", "subtotal", "tax", "total", "payment_terms"];
+const MAX_HINTS = 60;
+const clean = (v, n) => String(v == null ? "" : v).replace(/[\r\n]+/g, " ").trim().slice(0, n);
+function getHints(email) {
+  const u = read().users[String(email || "").trim().toLowerCase()];
+  return (u && u.hints) || [];
+}
+function addHint(email, h) {
+  if (!h || !HINT_FIELDS.includes(h.field)) return null;
+  const entry = { supplier: clean(h.supplier, 80), field: h.field, wrong: clean(h.wrong, 60), right: clean(h.right, 60), note: clean(h.note, 120), at: today() };
+  if (!entry.supplier || !entry.right) return null;
+  const db = read();
+  const u = db.users[String(email || "").trim().toLowerCase()];
+  if (!u) return null;
+  u.hints = u.hints || [];
+  const same = (x) => x.supplier.toLowerCase() === entry.supplier.toLowerCase() && x.field === entry.field;
+  const i = u.hints.findIndex(same);
+  if (i >= 0) u.hints[i] = entry; else u.hints.push(entry);
+  if (u.hints.length > MAX_HINTS) u.hints = u.hints.slice(-MAX_HINTS);
+  write(db);
+  return entry;
+}
+module.exports = { getHints, addHint, getUser, usageToday, usageMonth, quota, remaining, recordUse, setPlan, PLAN_LIMITS, FREE_MONTHLY, FREE_DAILY };

@@ -176,6 +176,16 @@ app.post("/api/checkout", async (req, res) => {
   }
 });
 
+/* ---------- corrections: "correct once, improve future invoices" ---------- */
+app.post("/api/corrections", (req, res) => {
+  const email = auth.currentEmail(req);
+  if (!email) return res.status(401).json({ error: "Log in first." });
+  const list = Array.isArray(req.body && req.body.corrections) ? req.body.corrections.slice(0, 20) : [];
+  let saved = 0;
+  list.forEach((c) => { if (store.addHint(email, c)) saved++; });
+  res.json({ saved });
+});
+
 /* ---------- routes ---------- */
 app.get("/api/health", (req, res) => res.json({ ok: true, mock: MOCK, ready: PROVIDER !== "none", provider: PROVIDER, payments: !!stripe }));
 
@@ -206,9 +216,10 @@ app.post("/api/extract", limiter, upload.single("file"), async (req, res) => {
     if (PROVIDER === "none") return res.status(500).json({ error: "The server has no AI provider configured. Add GEMINI_API_KEY (free) or ANTHROPIC_API_KEY to .env and restart." });
     if (!providers.fileKind(file)) return res.status(415).json({ error: "This file type isn't supported. Use JPG, PNG, WebP, PDF, TXT or CSV." });
 
+    const hints = store.getHints(user.email);
     const invoice = PROVIDER === "gemini"
-      ? await withRetry(() => providers.extractGemini(file, GEMINI_KEY, GEMINI_MODEL))
-      : await providers.extractAnthropic(file, anthropicClient, ANTHROPIC_MODEL);
+      ? await withRetry(() => providers.extractGemini(file, GEMINI_KEY, GEMINI_MODEL, hints))
+      : await providers.extractAnthropic(file, anthropicClient, ANTHROPIC_MODEL, hints);
 
     store.recordUse(user.email);
     const q3 = store.quota(store.getUser(user.email)); // re-read: the count changed after recordUse

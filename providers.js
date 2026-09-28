@@ -8,6 +8,17 @@ const SYSTEM =
   "If the line items do not add up to the subtotal, or subtotal plus tax does not equal the total, add a short note. " +
   "If the document is not an invoice, return empty fields and a note saying so.";
 
+// Turns a user's saved corrections into a short prompt section. They are hints only:
+// the model must never copy a corrected value into a different invoice.
+function hintsText(hints) {
+  if (!hints || !hints.length) return "";
+  const lines = hints.slice(-40).map((h) =>
+    '- Supplier "' + h.supplier + '", field "' + h.field + '": an earlier read gave "' + h.wrong + '" but the correct value was "' + h.right + '".' +
+    (h.note ? " User note: " + h.note : ""));
+  return "\n\nThe user corrected these mistakes on earlier invoices. Treat them only as hints about where to look and how to read that supplier's layout. " +
+    "Apply one only if this document is from the same supplier. Never copy a corrected value into a different invoice; always read the values from this document.\n" + lines.join("\n");
+}
+
 const IMAGE_TYPES = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" };
 
 function fileKind(file) {
@@ -45,10 +56,10 @@ const GEMINI_SCHEMA = {
   required: ["invoice_no", "supplier", "bill_to", "invoice_date", "due_date", "currency", "subtotal", "tax", "total", "payment_terms", "lines", "notes"],
 };
 
-async function extractGemini(file, apiKey, model) {
+async function extractGemini(file, apiKey, model, hints) {
   const kind = fileKind(file);
   if (!kind) return { unsupported: true };
-  const parts = [{ text: SYSTEM + "\n\nExtract the invoice data from this document." }];
+  const parts = [{ text: SYSTEM + hintsText(hints) + "\n\nExtract the invoice data from this document." }];
   if (kind === "text") {
     parts.push({ text: "Invoice text:\n\n" + file.buffer.toString("utf8").slice(0, 60000) });
   } else {
@@ -101,7 +112,7 @@ const ANTHROPIC_TOOL = {
   },
 };
 
-async function extractAnthropic(file, client, model) {
+async function extractAnthropic(file, client, model, hints) {
   const kind = fileKind(file);
   if (!kind) return { unsupported: true };
   const ask = { type: "text", text: "Extract the invoice data from this document." };
@@ -113,7 +124,7 @@ async function extractAnthropic(file, client, model) {
   const msg = await client.messages.create({
     model,
     max_tokens: 4000,
-    system: SYSTEM + " Always call the record_invoice tool.",
+    system: SYSTEM + hintsText(hints) + " Always call the record_invoice tool.",
     tools: [ANTHROPIC_TOOL],
     tool_choice: { type: "tool", name: "record_invoice" },
     messages: [{ role: "user", content }],
